@@ -164,8 +164,15 @@ app.get("/", (req, res) => {
     <header>
       <p class="eyebrow">Demo · not production</p>
       <h1>Tutoring session feedback</h1>
-      <p class="lede">For StudentBot to share how a Nerdy Tutors session went. Do not enter student names, emails, account IDs, or other personal identifiers.</p>
+      <p class="lede">Share how a Nerdy Tutors session went. Do not enter student names, emails, account IDs, or other personal identifiers.</p>
     </header>
+
+    <section id="saved-panel" class="saved" hidden>
+      <h2>Feedback saved</h2>
+      <p id="saved-summary" class="lede"></p>
+      <button type="button" id="submit-another">Submit another response</button>
+    </section>
+
     <form id="feedback-form" method="post" action="/api/feedback" novalidate>
       <input type="hidden" name="_csrf" id="csrf" value="${escapeHtml(token)}" />
       <label>
@@ -180,6 +187,12 @@ app.get("/", (req, res) => {
         <label class="radio"><input type="radio" name="rating" value="2" /> 2 — needs work</label>
         <label class="radio"><input type="radio" name="rating" value="1" /> 1 — poor</label>
       </fieldset>
+      <fieldset>
+        <legend>Would you recommend this session? <span class="hint">(optional)</span></legend>
+        <label class="radio"><input type="radio" name="wouldRecommend" value="yes" /> Yes</label>
+        <label class="radio"><input type="radio" name="wouldRecommend" value="no" /> No</label>
+        <label class="radio"><input type="radio" name="wouldRecommend" value="skip" checked /> Prefer not to say</label>
+      </fieldset>
       <label>
         What went well
         <textarea name="whatWentWell" maxlength="1000" rows="4" required placeholder="Topics covered, pacing, clarity…"></textarea>
@@ -192,21 +205,22 @@ app.get("/", (req, res) => {
       <button type="submit">Submit feedback</button>
       <p id="status" role="status" aria-live="polite"></p>
     </form>
-    <section class="recent">
-      <h2>Recent submissions <span class="hint">(demo board · gated)</span></h2>
+
+    <details class="staff" id="staff-board" ${unlocked ? "open" : ""}>
+      <summary>Staff only — recent submissions board</summary>
+      <p class="hint">Students do not need this. Staff unlock with the shared demo secret to review synthetic submissions.</p>
       <div id="unlock-wrap" ${unlocked ? "hidden" : ""}>
-        <p class="hint">Board requires the shared demo access secret (not for public tunnel visitors without it).</p>
         <form id="unlock-form">
           <label>
-            Demo access secret
+            Staff demo access secret
             <input type="password" name="secret" id="demo-secret" required autocomplete="off" />
           </label>
-          <button type="submit">Unlock board</button>
+          <button type="submit">Unlock staff board</button>
           <p id="unlock-status" role="status" aria-live="polite"></p>
         </form>
       </div>
-      <div id="list">${unlocked ? "Loading…" : '<p class="empty">Locked until demo access is unlocked.</p>'}</div>
-    </section>
+      <div id="list">${unlocked ? "Loading…" : '<p class="empty">Board locked.</p>'}</div>
+    </details>
   </main>
   <script src="/app.js"></script>
 </body>
@@ -259,6 +273,8 @@ app.post("/api/feedback", submitLimiter, requireCsrf, (req, res) => {
     req.body.whatCouldImprove,
     MAX_LEN.whatCouldImprove
   );
+  let wouldRecommend = sanitizeText(String(req.body.wouldRecommend || "skip"), 8);
+  if (!["yes", "no", "skip"].includes(wouldRecommend)) wouldRecommend = "skip";
 
   const rating = Number(ratingRaw);
   if (!sessionLabel || !whatWentWell || !whatCouldImprove) {
@@ -283,6 +299,7 @@ app.post("/api/feedback", submitLimiter, requireCsrf, (req, res) => {
     createdAt: new Date().toISOString(),
     sessionLabel,
     rating,
+    wouldRecommend,
     whatWentWell,
     whatCouldImprove,
   };
@@ -291,7 +308,19 @@ app.post("/api/feedback", submitLimiter, requireCsrf, (req, res) => {
   if (feedback.length > MAX_FEEDBACK) feedback.shift();
 
   const csrf = issueCsrf(req, res);
-  res.status(201).json({ ok: true, id: entry.id, csrf });
+  res.status(201).json({
+    ok: true,
+    id: entry.id,
+    csrf,
+    entry: {
+      sessionLabel: entry.sessionLabel,
+      rating: entry.rating,
+      wouldRecommend: entry.wouldRecommend,
+      whatWentWell: entry.whatWentWell,
+      whatCouldImprove: entry.whatCouldImprove,
+      createdAt: entry.createdAt,
+    },
+  });
 });
 
 app.use((err, req, res, next) => {
