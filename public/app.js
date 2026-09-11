@@ -3,13 +3,18 @@
   const status = document.getElementById("status");
   const list = document.getElementById("list");
   const csrfInput = document.getElementById("csrf");
-  const unlockForm = document.getElementById("unlock-form");
-  const unlockWrap = document.getElementById("unlock-wrap");
-  const unlockStatus = document.getElementById("unlock-status");
   const savedPanel = document.getElementById("saved-panel");
   const savedSummary = document.getElementById("saved-summary");
   const submitAnother = document.getElementById("submit-another");
+  const staffForm = document.getElementById("staff-form");
+  const staffGate = document.getElementById("staff-gate");
   const staffBoard = document.getElementById("staff-board");
+  const staffStatus = document.getElementById("staff-status");
+  const staffWho = document.getElementById("staff-who");
+  const staffSignout = document.getElementById("staff-signout");
+  const panelStudent = document.getElementById("panel-student");
+  const panelStaff = document.getElementById("panel-staff");
+  const tabs = document.querySelectorAll(".tab");
 
   function escapeHtml(s) {
     return String(s)
@@ -75,18 +80,28 @@
     status.textContent = "";
   }
 
-  async function refresh() {
+  function setTab(name) {
+    tabs.forEach(function (t) {
+      var on = t.getAttribute("data-tab") === name;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    panelStudent.hidden = name !== "student";
+    panelStaff.hidden = name !== "staff";
+    if (name === "staff" && staffBoard && !staffBoard.hidden) refreshBoard();
+  }
+
+  async function refreshBoard() {
     if (!list) return;
     try {
       const res = await fetch("/api/feedback", { credentials: "same-origin" });
       if (res.status === 401) {
-        list.innerHTML = '<p class="empty">Board locked.</p>';
-        if (unlockWrap) unlockWrap.hidden = false;
+        list.innerHTML = "";
+        if (staffGate) staffGate.hidden = false;
+        if (staffBoard) staffBoard.hidden = true;
         return;
       }
       const data = await res.json();
-      if (unlockWrap) unlockWrap.hidden = true;
-      if (staffBoard) staffBoard.open = true;
       if (!data.items || !data.items.length) {
         list.innerHTML = '<p class="empty">No feedback yet.</p>';
         return;
@@ -120,6 +135,29 @@
     }
   }
 
+  // Clear field errors as the student fixes them (StudentBot feedback).
+  var sessionInput = document.getElementById("sessionLabel");
+  if (sessionInput) {
+    sessionInput.addEventListener("input", function () {
+      var el = document.getElementById("err-sessionLabel");
+      if (el) { el.hidden = true; el.textContent = ""; }
+    });
+  }
+  document.querySelectorAll('input[name="rating"]').forEach(function (r) {
+    r.addEventListener("change", function () {
+      var el = document.getElementById("err-rating");
+      if (el) { el.hidden = true; el.textContent = ""; }
+    });
+  });
+  ["whatWentWell", "whatCouldImprove"].forEach(function (id) {
+    var ta = document.getElementById(id);
+    if (!ta) return;
+    ta.addEventListener("input", function () {
+      var el = document.getElementById("err-" + id);
+      if (el) { el.hidden = true; el.textContent = ""; }
+    });
+  });
+
   form.addEventListener("submit", async function (e) {
     e.preventDefault();
     status.textContent = "Submitting…";
@@ -148,7 +186,6 @@
         status.textContent = "Thanks — feedback recorded.";
         form.reset();
       }
-      await refresh();
     } catch (err) {
       status.textContent = "Network error.";
     }
@@ -166,39 +203,73 @@
     });
   }
 
-  if (unlockForm) {
-    unlockForm.addEventListener("submit", async function (e) {
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function () {
+      setTab(t.getAttribute("data-tab"));
+    });
+  });
+
+  function staffCsrf() {
+    var el = document.getElementById("staff-csrf");
+    return el ? el.value : "";
+  }
+
+  function setStaffCsrf(token) {
+    var el = document.getElementById("staff-csrf");
+    if (el && token) el.value = token;
+    if (token) setCsrf(token);
+  }
+
+  if (staffForm) {
+    staffForm.addEventListener("submit", async function (e) {
       e.preventDefault();
-      unlockStatus.textContent = "Unlocking…";
-      const secret = document.getElementById("demo-secret").value;
+      staffStatus.textContent = "Checking…";
+      var username = document.getElementById("staff-username").value;
       try {
-        const res = await fetch("/api/unlock", {
+        const res = await fetch("/api/staff/signin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
-          body: JSON.stringify({ secret: secret }),
+          body: JSON.stringify({ username: username, _csrf: staffCsrf() }),
         });
         const data = await res.json().catch(function () {
           return {};
         });
         if (!res.ok) {
-          unlockStatus.textContent = data.error || "Unlock failed.";
+          staffStatus.textContent = data.error || "Sign-in failed.";
+          if (data.csrf) setStaffCsrf(data.csrf);
+          else if (res.status === 403) {
+            var c = await fetch("/api/csrf", { credentials: "same-origin" }).then(function (r) { return r.json(); });
+            setStaffCsrf(c.csrf);
+          }
           return;
         }
-        unlockStatus.textContent = "Staff board unlocked.";
-        document.getElementById("demo-secret").value = "";
-        await refresh();
+        staffStatus.textContent = "";
+        if (data.csrf) setStaffCsrf(data.csrf);
+        if (staffWho) staffWho.textContent = data.username;
+        staffGate.hidden = true;
+        staffBoard.hidden = false;
+        await refreshBoard();
       } catch (err) {
-        unlockStatus.textContent = "Network error.";
+        staffStatus.textContent = "Network error.";
       }
     });
   }
 
-  // Only probe the board API when staff details is open or already unlocked
-  if (staffBoard) {
-    staffBoard.addEventListener("toggle", function () {
-      if (staffBoard.open) refresh();
+  if (staffSignout) {
+    staffSignout.addEventListener("click", async function () {
+      await fetch("/api/staff/signout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ _csrf: staffCsrf() }),
+      }).then(async function (res) {
+        var data = await res.json().catch(function () { return {}; });
+        if (data.csrf) setStaffCsrf(data.csrf);
+      });
+      staffBoard.hidden = true;
+      staffGate.hidden = false;
+      list.innerHTML = "";
     });
-    if (staffBoard.open) refresh();
   }
 })();
