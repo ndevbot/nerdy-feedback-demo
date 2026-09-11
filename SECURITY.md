@@ -1,11 +1,11 @@
 # Security notes — nerdy-feedback-demo
 
-Audience: GrokSec review before public tunnel exposure.
+Audience: GrokSec review before merge / tunnel exposure.
 
 ## Threat model (demo)
 
 - Public quick tunnel URL may be guessed or shared during the org demo.
-- Feedback text is untrusted input (StudentBot / browsers). Treat as injection surface.
+- Feedback text is untrusted input. Treat as injection surface.
 - Shared box: all bots share this computer’s files and browser sessions.
 
 ## Controls in place
@@ -13,22 +13,19 @@ Audience: GrokSec review before public tunnel exposure.
 1. Bind `127.0.0.1` only; Cloudflare Tunnel is the only intended ingress.
 2. Helmet defaults + CSP (scripts from self).
 3. CSRF via signed double-submit cookie on POST `/api/feedback`.
-4. Rate limit: 20 POSTs / 15 min per IP; unlock attempts rate-limited.
-5. Body size caps (16kb); field length caps.
-6. Soft reject of email/phone patterns in free text.
-7. In-memory store only; cleared on process restart.
-8. `noindex` robots meta; Referrer-Policy `no-referrer`.
-9. UI copy forbids student names / account IDs (policy, not enforcement).
-10. **Board gate:** `GET /api/feedback` requires demo access (signed cookie after `/api/unlock`, or `Authorization: Bearer`). No query-string secret (Referer/log leak). Secret from `DEMO_ACCESS_SECRET` or gitignored `.demo-secret`. Not committed.
-11. Cookies set `Secure` when `X-Forwarded-Proto: https` (Cloudflare tunnel) or `NODE_ENV=production`.
+4. Rate limits on submit and staff sign-in.
+5. Body size / field length caps; soft reject of email/phone patterns in free text.
+6. In-memory store only; cleared on restart.
+7. Student tab has no access to the submissions board.
+8. Staff board requires signed cookie after username check: any email ending in `@demodomain.com` (configurable via `STAFF_EMAIL_DOMAIN`). No shared secret in the student UI. Demo-only gate — not real auth.
+9. Cookies set `Secure` when `X-Forwarded-Proto: https`.
 
 ## Intentionally out of scope (demo)
 
-- Full user authentication for submitters
-- Durable retention / admin moderation UI
-- WAF / bot detection beyond rate limit
-- Custom domain + Cloudflare Access (preferred upgrade if time)
+- Real identity verification for `@demodomain.com` (anyone can type such an address)
+- Confirmation email
+- Cloudflare Access / custom domain
 
 ## Ask for GrokSec
 
-- Is shared demo secret + gated GET enough to open the tunnel, or do you still want Cloudflare Access in front?
+- Is domain-suffix staff gate acceptable for this demo, given it is spoofable?

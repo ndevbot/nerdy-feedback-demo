@@ -3,13 +3,18 @@
   const status = document.getElementById("status");
   const list = document.getElementById("list");
   const csrfInput = document.getElementById("csrf");
-  const unlockForm = document.getElementById("unlock-form");
-  const unlockWrap = document.getElementById("unlock-wrap");
-  const unlockStatus = document.getElementById("unlock-status");
   const savedPanel = document.getElementById("saved-panel");
   const savedSummary = document.getElementById("saved-summary");
   const submitAnother = document.getElementById("submit-another");
+  const staffForm = document.getElementById("staff-form");
+  const staffGate = document.getElementById("staff-gate");
   const staffBoard = document.getElementById("staff-board");
+  const staffStatus = document.getElementById("staff-status");
+  const staffWho = document.getElementById("staff-who");
+  const staffSignout = document.getElementById("staff-signout");
+  const panelStudent = document.getElementById("panel-student");
+  const panelStaff = document.getElementById("panel-staff");
+  const tabs = document.querySelectorAll(".tab");
 
   function escapeHtml(s) {
     return String(s)
@@ -75,18 +80,28 @@
     status.textContent = "";
   }
 
-  async function refresh() {
+  function setTab(name) {
+    tabs.forEach(function (t) {
+      var on = t.getAttribute("data-tab") === name;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    panelStudent.hidden = name !== "student";
+    panelStaff.hidden = name !== "staff";
+    if (name === "staff" && staffBoard && !staffBoard.hidden) refreshBoard();
+  }
+
+  async function refreshBoard() {
     if (!list) return;
     try {
       const res = await fetch("/api/feedback", { credentials: "same-origin" });
       if (res.status === 401) {
-        list.innerHTML = '<p class="empty">Board locked.</p>';
-        if (unlockWrap) unlockWrap.hidden = false;
+        list.innerHTML = "";
+        if (staffGate) staffGate.hidden = false;
+        if (staffBoard) staffBoard.hidden = true;
         return;
       }
       const data = await res.json();
-      if (unlockWrap) unlockWrap.hidden = true;
-      if (staffBoard) staffBoard.open = true;
       if (!data.items || !data.items.length) {
         list.innerHTML = '<p class="empty">No feedback yet.</p>';
         return;
@@ -148,7 +163,6 @@
         status.textContent = "Thanks — feedback recorded.";
         form.reset();
       }
-      await refresh();
     } catch (err) {
       status.textContent = "Network error.";
     }
@@ -166,39 +180,48 @@
     });
   }
 
-  if (unlockForm) {
-    unlockForm.addEventListener("submit", async function (e) {
+  tabs.forEach(function (t) {
+    t.addEventListener("click", function () {
+      setTab(t.getAttribute("data-tab"));
+    });
+  });
+
+  if (staffForm) {
+    staffForm.addEventListener("submit", async function (e) {
       e.preventDefault();
-      unlockStatus.textContent = "Unlocking…";
-      const secret = document.getElementById("demo-secret").value;
+      staffStatus.textContent = "Checking…";
+      var username = document.getElementById("staff-username").value;
       try {
-        const res = await fetch("/api/unlock", {
+        const res = await fetch("/api/staff/signin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
-          body: JSON.stringify({ secret: secret }),
+          body: JSON.stringify({ username: username }),
         });
         const data = await res.json().catch(function () {
           return {};
         });
         if (!res.ok) {
-          unlockStatus.textContent = data.error || "Unlock failed.";
+          staffStatus.textContent = data.error || "Sign-in failed.";
           return;
         }
-        unlockStatus.textContent = "Staff board unlocked.";
-        document.getElementById("demo-secret").value = "";
-        await refresh();
+        staffStatus.textContent = "";
+        if (staffWho) staffWho.textContent = data.username;
+        staffGate.hidden = true;
+        staffBoard.hidden = false;
+        await refreshBoard();
       } catch (err) {
-        unlockStatus.textContent = "Network error.";
+        staffStatus.textContent = "Network error.";
       }
     });
   }
 
-  // Only probe the board API when staff details is open or already unlocked
-  if (staffBoard) {
-    staffBoard.addEventListener("toggle", function () {
-      if (staffBoard.open) refresh();
+  if (staffSignout) {
+    staffSignout.addEventListener("click", async function () {
+      await fetch("/api/staff/signout", { method: "POST", credentials: "same-origin" });
+      staffBoard.hidden = true;
+      staffGate.hidden = false;
+      list.innerHTML = "";
     });
-    if (staffBoard.open) refresh();
   }
 })();

@@ -5,27 +5,12 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const cookieParser = require("cookie-parser");
 const crypto = require("crypto");
-const fs = require("fs");
 const path = require("path");
 
 const PORT = process.env.PORT || 8787;
 const SESSION_SECRET =
   process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
-
-function loadDemoSecret() {
-  if (process.env.DEMO_ACCESS_SECRET) return process.env.DEMO_ACCESS_SECRET.trim();
-  const file = path.join(__dirname, ".demo-secret");
-  try {
-    return fs.readFileSync(file, "utf8").trim();
-  } catch {
-    return null;
-  }
-}
-
-const DEMO_ACCESS_SECRET = loadDemoSecret();
-if (!DEMO_ACCESS_SECRET) {
-  console.warn("WARNING: no DEMO_ACCESS_SECRET / .demo-secret — board stays locked.");
-}
+const STAFF_DOMAIN = (process.env.STAFF_EMAIL_DOMAIN || "demodomain.com").toLowerCase();
 
 const feedback = [];
 const MAX_FEEDBACK = 200;
@@ -73,26 +58,18 @@ const submitLimiter = rateLimit({
   message: { error: "Too many submissions. Try again later." },
 });
 
-const unlockLimiter = rateLimit({
+const staffLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 40,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many unlock attempts." },
+  message: { error: "Too many staff sign-in attempts." },
 });
 
 function cookieSecure(req) {
   if (process.env.NODE_ENV === "production") return true;
   const xf = (req.get("x-forwarded-proto") || "").split(",")[0].trim();
   return xf === "https";
-}
-
-function timingSafeEqualStr(a, b) {
-  if (typeof a !== "string" || typeof b !== "string") return false;
-  const ba = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ba.length !== bb.length) return false;
-  return crypto.timingSafeEqual(ba, bb);
 }
 
 function issueCsrf(req, res) {
@@ -116,21 +93,21 @@ function requireCsrf(req, res, next) {
   next();
 }
 
-function hasDemoAccess(req) {
-  if (!DEMO_ACCESS_SECRET) return false;
-  const cookieOk =
-    req.signedCookies.demo_access &&
-    timingSafeEqualStr(req.signedCookies.demo_access, DEMO_ACCESS_SECRET);
-  if (cookieOk) return true;
-  const auth = req.get("authorization") || "";
-  const m = auth.match(/^Bearer\s+(.+)$/i);
-  if (m && timingSafeEqualStr(m[1].trim(), DEMO_ACCESS_SECRET)) return true;
-  return false;
+function isStaffEmail(value) {
+  if (typeof value !== "string") return false;
+  const email = value.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false;
+  return email.endsWith("@" + STAFF_DOMAIN);
 }
 
-function requireDemoAccess(req, res, next) {
-  if (hasDemoAccess(req)) return next();
-  return res.status(401).json({ error: "Demo access required.", code: "DEMO_LOCKED" });
+function hasStaffAccess(req) {
+  const staff = req.signedCookies.staff_user;
+  return typeof staff === "string" && isStaffEmail(staff);
+}
+
+function requireStaff(req, res, next) {
+  if (hasStaffAccess(req)) return next();
+  return res.status(401).json({ error: "Staff sign-in required.", code: "STAFF_LOCKED" });
 }
 
 function sanitizeText(value, max) {
@@ -149,7 +126,8 @@ function escapeHtml(s) {
 
 app.get("/", (req, res) => {
   const token = issueCsrf(req, res);
-  const unlocked = hasDemoAccess(req);
+  const staff = hasStaffAccess(req);
+  const staffUser = staff ? escapeHtml(req.signedCookies.staff_user) : "";
   res.type("html").send(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -157,76 +135,102 @@ app.get("/", (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex,nofollow" />
   <title>Nerdy Tutors — Session Feedback (Demo)</title>
-  <link rel="stylesheet" href="/styles.css?v=2" />
+  <link rel="stylesheet" href="/styles.css?v=3" />
 </head>
 <body>
-  <main class="wrap">
-    <header>
-      <p class="eyebrow">Demo · not production</p>
-      <h1>Tutoring session feedback</h1>
-      <p class="lede">Share how a Nerdy Tutors session went. Do not enter student names, emails, account IDs, or other personal identifiers.</p>
+  <div class="shell">
+    <header class="top">
+      <div class="brand">
+        <span class="logo" aria-hidden="true">N</span>
+        <div>
+          <p class="brand-name">Nerdy Tutors</p>
+          <p class="brand-sub">Session feedback · demo</p>
+        </div>
+      </div>
+      <nav class="tabs" role="tablist" aria-label="Main">
+        <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="student" id="tab-student">Leave feedback</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" data-tab="staff" id="tab-staff">Staff</button>
+      </nav>
     </header>
 
-    <section id="saved-panel" class="saved" hidden>
-      <h2>Feedback saved</h2>
-      <p id="saved-summary" class="lede"></p>
-      <button type="button" id="submit-another">Submit another response</button>
-    </section>
+    <main class="wrap">
+      <section id="panel-student" class="panel" role="tabpanel" aria-labelledby="tab-student">
+        <div class="hero">
+          <p class="eyebrow">For students</p>
+          <h1>How did your tutoring session go?</h1>
+          <p class="lede">Takes about a minute. No account needed — just tell us what helped and what could be better. Please skip real names, emails, and account IDs.</p>
+        </div>
 
-    <form id="feedback-form" method="post" action="/api/feedback" novalidate>
-      <input type="hidden" name="_csrf" id="csrf" value="${escapeHtml(token)}" />
-      <label>
-        Session label <span class="req" aria-hidden="true">*</span> <span class="hint">(generic only, e.g. “math practice — week 3”)</span>
-        <input name="sessionLabel" id="sessionLabel" maxlength="80" required placeholder="math practice — week 3" autocomplete="off" />
-        <p class="field-error" id="err-sessionLabel" hidden></p>
-      </label>
-      <fieldset id="rating-fieldset">
-        <legend>Overall rating <span class="req" aria-hidden="true">*</span></legend>
-        <label class="radio"><input type="radio" name="rating" value="5" required /> 5 — excellent</label>
-        <label class="radio"><input type="radio" name="rating" value="4" /> 4 — good</label>
-        <label class="radio"><input type="radio" name="rating" value="3" /> 3 — okay</label>
-        <label class="radio"><input type="radio" name="rating" value="2" /> 2 — needs work</label>
-        <label class="radio"><input type="radio" name="rating" value="1" /> 1 — poor</label>
-        <p class="field-error" id="err-rating" hidden></p>
-      </fieldset>
-      <fieldset>
-        <legend>Would you recommend this session? <span class="hint">(optional)</span></legend>
-        <label class="radio"><input type="radio" name="wouldRecommend" value="yes" /> Yes</label>
-        <label class="radio"><input type="radio" name="wouldRecommend" value="no" /> No</label>
-        <label class="radio"><input type="radio" name="wouldRecommend" value="skip" checked /> Prefer not to say</label>
-      </fieldset>
-      <label>
-        What went well <span class="req" aria-hidden="true">*</span>
-        <textarea name="whatWentWell" id="whatWentWell" maxlength="1000" rows="3" required placeholder="Topics covered, pacing, clarity…"></textarea>
-        <p class="field-error" id="err-whatWentWell" hidden></p>
-      </label>
-      <label>
-        What could improve <span class="req" aria-hidden="true">*</span>
-        <textarea name="whatCouldImprove" id="whatCouldImprove" maxlength="1000" rows="3" required placeholder="Gaps, confusion, UX friction…"></textarea>
-        <p class="field-error" id="err-whatCouldImprove" hidden></p>
-      </label>
-      <p class="privacy">No names, emails, phone numbers, or account IDs. This demo stores feedback in memory only and clears on restart.</p>
-      <button type="submit">Submit feedback</button>
-      <p id="status" role="status" aria-live="polite"></p>
-    </form>
+        <section id="saved-panel" class="saved" hidden>
+          <h2>Feedback saved</h2>
+          <p id="saved-summary" class="lede"></p>
+          <button type="button" id="submit-another">Submit another response</button>
+        </section>
 
-    <details class="staff" id="staff-board" ${unlocked ? "open" : ""}>
-      <summary>Staff only — recent submissions board</summary>
-      <p class="hint">Students do not need this. Staff unlock with the shared demo secret to review synthetic submissions.</p>
-      <div id="unlock-wrap" ${unlocked ? "hidden" : ""}>
-        <form id="unlock-form">
+        <form id="feedback-form" method="post" action="/api/feedback" novalidate>
+          <input type="hidden" name="_csrf" id="csrf" value="${escapeHtml(token)}" />
           <label>
-            Staff demo access secret
-            <input type="password" name="secret" id="demo-secret" required autocomplete="off" />
+            Session label <span class="req" aria-hidden="true">*</span> <span class="hint">(generic only, e.g. “math practice — week 3”)</span>
+            <input name="sessionLabel" id="sessionLabel" maxlength="80" required placeholder="math practice — week 3" autocomplete="off" />
+            <p class="field-error" id="err-sessionLabel" hidden></p>
           </label>
-          <button type="submit">Unlock staff board</button>
-          <p id="unlock-status" role="status" aria-live="polite"></p>
+          <fieldset id="rating-fieldset">
+            <legend>Overall rating <span class="req" aria-hidden="true">*</span></legend>
+            <label class="radio"><input type="radio" name="rating" value="5" required /> 5 — excellent</label>
+            <label class="radio"><input type="radio" name="rating" value="4" /> 4 — good</label>
+            <label class="radio"><input type="radio" name="rating" value="3" /> 3 — okay</label>
+            <label class="radio"><input type="radio" name="rating" value="2" /> 2 — needs work</label>
+            <label class="radio"><input type="radio" name="rating" value="1" /> 1 — poor</label>
+            <p class="field-error" id="err-rating" hidden></p>
+          </fieldset>
+          <fieldset>
+            <legend>Would you recommend this session? <span class="hint">(optional)</span></legend>
+            <label class="radio"><input type="radio" name="wouldRecommend" value="yes" /> Yes</label>
+            <label class="radio"><input type="radio" name="wouldRecommend" value="no" /> No</label>
+            <label class="radio"><input type="radio" name="wouldRecommend" value="skip" checked /> Prefer not to say</label>
+          </fieldset>
+          <label>
+            What went well <span class="req" aria-hidden="true">*</span>
+            <textarea name="whatWentWell" id="whatWentWell" maxlength="1000" rows="3" required placeholder="Topics covered, pacing, clarity…"></textarea>
+            <p class="field-error" id="err-whatWentWell" hidden></p>
+          </label>
+          <label>
+            What could improve <span class="req" aria-hidden="true">*</span>
+            <textarea name="whatCouldImprove" id="whatCouldImprove" maxlength="1000" rows="3" required placeholder="Gaps, confusion, UX friction…"></textarea>
+            <p class="field-error" id="err-whatCouldImprove" hidden></p>
+          </label>
+          <p class="privacy">No names, emails, phone numbers, or account IDs. Demo stores feedback in memory only and clears on restart.</p>
+          <button type="submit">Submit feedback</button>
+          <p id="status" role="status" aria-live="polite"></p>
         </form>
-      </div>
-      <div id="list">${unlocked ? "Loading…" : '<p class="empty">Board locked.</p>'}</div>
-    </details>
-  </main>
-  <script src="/app.js?v=2"></script>
+      </section>
+
+      <section id="panel-staff" class="panel" role="tabpanel" aria-labelledby="tab-staff" hidden>
+        <div class="hero">
+          <p class="eyebrow">Staff / demo only</p>
+          <h1>Recent submissions</h1>
+          <p class="lede">Not for students. Sign in with any <code>@${escapeHtml(STAFF_DOMAIN)}</code> username to view the board. No password — demo gate only.</p>
+        </div>
+
+        <div id="staff-gate" ${staff ? "hidden" : ""}>
+          <form id="staff-form">
+            <label>
+              Username (email)
+              <input type="email" name="username" id="staff-username" required placeholder="you@${escapeHtml(STAFF_DOMAIN)}" autocomplete="username" />
+            </label>
+            <button type="submit">View staff board</button>
+            <p id="staff-status" role="status" aria-live="polite"></p>
+          </form>
+        </div>
+
+        <div id="staff-board" ${staff ? "" : "hidden"}>
+          <p class="hint">Signed in as <strong id="staff-who">${staffUser}</strong> · <button type="button" id="staff-signout" class="linkish">Sign out</button></p>
+          <div id="list">${staff ? "Loading…" : ""}</div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js?v=3"></script>
 </body>
 </html>`);
 });
@@ -236,25 +240,29 @@ app.get("/api/csrf", (req, res) => {
   res.json({ csrf: token });
 });
 
-app.post("/api/unlock", unlockLimiter, (req, res) => {
-  if (!DEMO_ACCESS_SECRET) {
-    return res.status(503).json({ error: "Demo access not configured." });
+app.post("/api/staff/signin", staffLimiter, (req, res) => {
+  const username = sanitizeText(String((req.body && req.body.username) || ""), 120).toLowerCase();
+  if (!isStaffEmail(username)) {
+    return res.status(401).json({
+      error: `Use a staff username ending in @${STAFF_DOMAIN}.`,
+    });
   }
-  const provided = (req.body && (req.body.secret || req.body.access)) || "";
-  if (!timingSafeEqualStr(String(provided || ""), DEMO_ACCESS_SECRET)) {
-    return res.status(401).json({ error: "Invalid demo access secret." });
-  }
-  res.cookie("demo_access", DEMO_ACCESS_SECRET, {
+  res.cookie("staff_user", username, {
     httpOnly: true,
     sameSite: "lax",
     secure: cookieSecure(req),
     signed: true,
     maxAge: 8 * 60 * 60 * 1000,
   });
+  res.json({ ok: true, username });
+});
+
+app.post("/api/staff/signout", (req, res) => {
+  res.clearCookie("staff_user");
   res.json({ ok: true });
 });
 
-app.get("/api/feedback", requireDemoAccess, (req, res) => {
+app.get("/api/feedback", requireStaff, (req, res) => {
   res.json({
     count: feedback.length,
     items: feedback.slice(-25).reverse(),
@@ -266,6 +274,7 @@ app.get("/api/health", (req, res) => {
     ok: true,
     service: "nerdy-feedback-demo",
     boardGated: true,
+    staffDomain: STAFF_DOMAIN,
   });
 });
 
