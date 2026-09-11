@@ -19,7 +19,7 @@ Repo: https://github.com/ndevbot/nerdy-feedback-demo
 - Field errors clear on input; summary “Please fix…” clears when all are fixed
 - Staff board API gated behind staff cookie
 - Staff UI labels the session as “Staff session” (no typed email on screen)
-- Staff metrics: volume, avg/histogram ratings, recommend mix, chip-subject mix, last submit, soft-PII rejects (no free-text / PII)
+- Staff metrics: volume, avg rating, rating bars, recommend mix, subject mix (synonym-aware chips), friendly timestamps; ops metrics collapsed
 - In-memory store only (clears on process restart)
 
 ## Run

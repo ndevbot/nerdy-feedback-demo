@@ -153,7 +153,7 @@ app.get("/", (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex,nofollow" />
   <title>Nerdy Tutors — Session Feedback (Demo)</title>
-  <link rel="stylesheet" href="/styles.css?v=11" />
+  <link rel="stylesheet" href="/styles.css?v=12" />
 </head>
 <body>
   <div class="shell">
@@ -272,7 +272,7 @@ app.get("/", (req, res) => {
       </section>
     </main>
   </div>
-  <script src="/app.js?v=11"></script>
+  <script src="/app.js?v=12"></script>
 </body>
 </html>`);
 });
@@ -304,9 +304,16 @@ app.post("/api/staff/signout", requireCsrf, (req, res) => {
 });
 
 function chipSubject(sessionLabel) {
-  const label = String(sessionLabel || "");
+  const label = String(sessionLabel || "").toLowerCase();
+  if (!label.trim()) return "Other";
+  // Match fixed chips + common student free-text synonyms (still no free-text displayed).
+  if (/(math|algebra|geometry|calculus|trig)/.test(label)) return "Math";
+  if (/(science|chem|biology|\bbio\b|physics)/.test(label)) return "Science";
+  if (/(writing|essay|english|grammar)/.test(label)) return "Writing";
+  if (/(test prep|\bsat\b|\bact\b|exam prep|gre|gmat)/.test(label)) return "Test prep";
   for (const chip of SUBJECT_CHIPS) {
-    if (label === chip || label.startsWith(chip + " ")) return chip;
+    const c = chip.toLowerCase();
+    if (label === c || label.startsWith(c + " ") || label.includes(c)) return chip;
   }
   return "Other";
 }
