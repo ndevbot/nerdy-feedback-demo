@@ -5,12 +5,28 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const cookieParser = require("cookie-parser");
 const crypto = require("crypto");
+const fs = require("fs");
 const path = require("path");
 
 const PORT = process.env.PORT || 8787;
 const SESSION_SECRET =
   process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 const STAFF_DOMAIN = (process.env.STAFF_EMAIL_DOMAIN || "demodomain.com").toLowerCase();
+
+function loadStaffSecret() {
+  if (process.env.STAFF_ACCESS_SECRET) return process.env.STAFF_ACCESS_SECRET.trim();
+  if (process.env.DEMO_ACCESS_SECRET) return process.env.DEMO_ACCESS_SECRET.trim();
+  try {
+    return fs.readFileSync(path.join(__dirname, ".demo-secret"), "utf8").trim();
+  } catch {
+    return null;
+  }
+}
+
+const STAFF_ACCESS_SECRET = loadStaffSecret();
+if (!STAFF_ACCESS_SECRET) {
+  console.warn("WARNING: no STAFF_ACCESS_SECRET / .demo-secret — staff board stays locked.");
+}
 
 const feedback = [];
 const MAX_FEEDBACK = 200;
@@ -66,6 +82,14 @@ const staffLimiter = rateLimit({
   message: { error: "Too many staff sign-in attempts." },
 });
 
+function timingSafeEqualStr(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
+
 function cookieSecure(req) {
   if (process.env.NODE_ENV === "production") return true;
   const xf = (req.get("x-forwarded-proto") || "").split(",")[0].trim();
@@ -91,6 +115,16 @@ function requireCsrf(req, res, next) {
     return res.status(403).json({ error: "Invalid or missing CSRF token." });
   }
   next();
+}
+
+function staffCookieOpts(req) {
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: cookieSecure(req),
+    signed: true,
+    path: "/",
+  };
 }
 
 function isStaffEmail(value) {
@@ -135,7 +169,7 @@ app.get("/", (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex,nofollow" />
   <title>Nerdy Tutors — Session Feedback (Demo)</title>
-  <link rel="stylesheet" href="/styles.css?v=3" />
+  <link rel="stylesheet" href="/styles.css?v=4" />
 </head>
 <body>
   <div class="shell">
@@ -214,10 +248,16 @@ app.get("/", (req, res) => {
 
         <div id="staff-gate" ${staff ? "hidden" : ""}>
           <form id="staff-form">
+            <input type="hidden" name="_csrf" id="staff-csrf" value="${escapeHtml(token)}" />
             <label>
               Username (email)
               <input type="email" name="username" id="staff-username" required placeholder="you@${escapeHtml(STAFF_DOMAIN)}" autocomplete="username" />
             </label>
+            <label>
+              Staff access secret
+              <input type="password" name="secret" id="staff-secret" required autocomplete="current-password" />
+            </label>
+            <p class="hint">Demo gate: username must end in @${escapeHtml(STAFF_DOMAIN)} <em>and</em> the shared staff secret (not student-facing).</p>
             <button type="submit">View staff board</button>
             <p id="staff-status" role="status" aria-live="polite"></p>
           </form>
@@ -230,7 +270,7 @@ app.get("/", (req, res) => {
       </section>
     </main>
   </div>
-  <script src="/app.js?v=3"></script>
+  <script src="/app.js?v=4"></script>
 </body>
 </html>`);
 });
@@ -240,26 +280,30 @@ app.get("/api/csrf", (req, res) => {
   res.json({ csrf: token });
 });
 
-app.post("/api/staff/signin", staffLimiter, (req, res) => {
+app.post("/api/staff/signin", staffLimiter, requireCsrf, (req, res) => {
+  if (!STAFF_ACCESS_SECRET) {
+    return res.status(503).json({ error: "Staff access is not configured." });
+  }
   const username = sanitizeText(String((req.body && req.body.username) || ""), 120).toLowerCase();
+  const secret = String((req.body && req.body.secret) || "");
   if (!isStaffEmail(username)) {
     return res.status(401).json({
       error: `Use a staff username ending in @${STAFF_DOMAIN}.`,
     });
   }
-  res.cookie("staff_user", username, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: cookieSecure(req),
-    signed: true,
-    maxAge: 8 * 60 * 60 * 1000,
-  });
-  res.json({ ok: true, username });
+  if (!timingSafeEqualStr(secret, STAFF_ACCESS_SECRET)) {
+    return res.status(401).json({ error: "Invalid staff access secret." });
+  }
+  const opts = { ...staffCookieOpts(req), maxAge: 8 * 60 * 60 * 1000 };
+  res.cookie("staff_user", username, opts);
+  const csrf = issueCsrf(req, res);
+  res.json({ ok: true, username, csrf });
 });
 
-app.post("/api/staff/signout", (req, res) => {
-  res.clearCookie("staff_user");
-  res.json({ ok: true });
+app.post("/api/staff/signout", requireCsrf, (req, res) => {
+  res.clearCookie("staff_user", staffCookieOpts(req));
+  const csrf = issueCsrf(req, res);
+  res.json({ ok: true, csrf });
 });
 
 app.get("/api/feedback", requireStaff, (req, res) => {
@@ -275,6 +319,7 @@ app.get("/api/health", (req, res) => {
     service: "nerdy-feedback-demo",
     boardGated: true,
     staffDomain: STAFF_DOMAIN,
+    staffSecretConfigured: Boolean(STAFF_ACCESS_SECRET),
   });
 });
 

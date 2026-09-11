@@ -186,27 +186,46 @@
     });
   });
 
+  function staffCsrf() {
+    var el = document.getElementById("staff-csrf");
+    return el ? el.value : "";
+  }
+
+  function setStaffCsrf(token) {
+    var el = document.getElementById("staff-csrf");
+    if (el && token) el.value = token;
+    if (token) setCsrf(token);
+  }
+
   if (staffForm) {
     staffForm.addEventListener("submit", async function (e) {
       e.preventDefault();
       staffStatus.textContent = "Checking…";
       var username = document.getElementById("staff-username").value;
+      var secret = document.getElementById("staff-secret").value;
       try {
         const res = await fetch("/api/staff/signin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
-          body: JSON.stringify({ username: username }),
+          body: JSON.stringify({ username: username, secret: secret, _csrf: staffCsrf() }),
         });
         const data = await res.json().catch(function () {
           return {};
         });
         if (!res.ok) {
           staffStatus.textContent = data.error || "Sign-in failed.";
+          if (data.csrf) setStaffCsrf(data.csrf);
+          else if (res.status === 403) {
+            var c = await fetch("/api/csrf", { credentials: "same-origin" }).then(function (r) { return r.json(); });
+            setStaffCsrf(c.csrf);
+          }
           return;
         }
         staffStatus.textContent = "";
+        if (data.csrf) setStaffCsrf(data.csrf);
         if (staffWho) staffWho.textContent = data.username;
+        document.getElementById("staff-secret").value = "";
         staffGate.hidden = true;
         staffBoard.hidden = false;
         await refreshBoard();
@@ -218,7 +237,15 @@
 
   if (staffSignout) {
     staffSignout.addEventListener("click", async function () {
-      await fetch("/api/staff/signout", { method: "POST", credentials: "same-origin" });
+      await fetch("/api/staff/signout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ _csrf: staffCsrf() }),
+      }).then(async function (res) {
+        var data = await res.json().catch(function () { return {}; });
+        if (data.csrf) setStaffCsrf(data.csrf);
+      });
       staffBoard.hidden = true;
       staffGate.hidden = false;
       list.innerHTML = "";
