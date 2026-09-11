@@ -107,3 +107,17 @@ button:hover { filter: brightness(1.05); }
   padding: 0.5rem 0;
 }
 .staff[open] > summary { margin-bottom: 0.75rem; }
+
+.req { color: #b42318; font-weight: 700; }
+.field-error {
+  color: #b42318;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0.35rem 0 0;
+}
+.wrap { max-width: 820px; }
+@media (min-width: 900px) {
+  form label textarea { rows: 3; }
+  .wrap { padding-top: 1.5rem; }
+  fieldset { margin-bottom: 0.75rem; }
+}

@@ -20,6 +20,28 @@
       .replace(/'/g, "&#39;");
   }
 
+  function clearFieldErrors() {
+    ["sessionLabel", "rating", "whatWentWell", "whatCouldImprove"].forEach(function (k) {
+      var el = document.getElementById("err-" + k);
+      if (el) {
+        el.hidden = true;
+        el.textContent = "";
+      }
+    });
+  }
+
+  function showFieldErrors(fieldErrors) {
+    clearFieldErrors();
+    if (!fieldErrors) return;
+    Object.keys(fieldErrors).forEach(function (k) {
+      var el = document.getElementById("err-" + k);
+      if (el) {
+        el.textContent = fieldErrors[k];
+        el.hidden = false;
+      }
+    });
+  }
+
   function setCsrf(token) {
     if (token && csrfInput) csrfInput.value = token;
   }
@@ -101,6 +123,7 @@
   form.addEventListener("submit", async function (e) {
     e.preventDefault();
     status.textContent = "Submitting…";
+    clearFieldErrors();
     const body = new URLSearchParams(new FormData(form));
     try {
       const res = await fetch("/api/feedback", {
@@ -114,6 +137,7 @@
       });
       if (!res.ok) {
         status.textContent = data.error || "Submit failed.";
+        if (data.fieldErrors) showFieldErrors(data.fieldErrors);
         if (res.status === 403) await refreshCsrf();
         return;
       }

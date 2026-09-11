@@ -157,7 +157,7 @@ app.get("/", (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex,nofollow" />
   <title>Nerdy Tutors — Session Feedback (Demo)</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=2" />
 </head>
 <body>
   <main class="wrap">
@@ -176,16 +176,18 @@ app.get("/", (req, res) => {
     <form id="feedback-form" method="post" action="/api/feedback" novalidate>
       <input type="hidden" name="_csrf" id="csrf" value="${escapeHtml(token)}" />
       <label>
-        Session label <span class="hint">(generic only, e.g. “math practice — week 3”)</span>
-        <input name="sessionLabel" maxlength="80" required placeholder="math practice — week 3" autocomplete="off" />
+        Session label <span class="req" aria-hidden="true">*</span> <span class="hint">(generic only, e.g. “math practice — week 3”)</span>
+        <input name="sessionLabel" id="sessionLabel" maxlength="80" required placeholder="math practice — week 3" autocomplete="off" />
+        <p class="field-error" id="err-sessionLabel" hidden></p>
       </label>
-      <fieldset>
-        <legend>Overall rating</legend>
+      <fieldset id="rating-fieldset">
+        <legend>Overall rating <span class="req" aria-hidden="true">*</span></legend>
         <label class="radio"><input type="radio" name="rating" value="5" required /> 5 — excellent</label>
         <label class="radio"><input type="radio" name="rating" value="4" /> 4 — good</label>
         <label class="radio"><input type="radio" name="rating" value="3" /> 3 — okay</label>
         <label class="radio"><input type="radio" name="rating" value="2" /> 2 — needs work</label>
         <label class="radio"><input type="radio" name="rating" value="1" /> 1 — poor</label>
+        <p class="field-error" id="err-rating" hidden></p>
       </fieldset>
       <fieldset>
         <legend>Would you recommend this session? <span class="hint">(optional)</span></legend>
@@ -194,12 +196,14 @@ app.get("/", (req, res) => {
         <label class="radio"><input type="radio" name="wouldRecommend" value="skip" checked /> Prefer not to say</label>
       </fieldset>
       <label>
-        What went well
-        <textarea name="whatWentWell" maxlength="1000" rows="4" required placeholder="Topics covered, pacing, clarity…"></textarea>
+        What went well <span class="req" aria-hidden="true">*</span>
+        <textarea name="whatWentWell" id="whatWentWell" maxlength="1000" rows="3" required placeholder="Topics covered, pacing, clarity…"></textarea>
+        <p class="field-error" id="err-whatWentWell" hidden></p>
       </label>
       <label>
-        What could improve
-        <textarea name="whatCouldImprove" maxlength="1000" rows="4" required placeholder="Gaps, confusion, UX friction…"></textarea>
+        What could improve <span class="req" aria-hidden="true">*</span>
+        <textarea name="whatCouldImprove" id="whatCouldImprove" maxlength="1000" rows="3" required placeholder="Gaps, confusion, UX friction…"></textarea>
+        <p class="field-error" id="err-whatCouldImprove" hidden></p>
       </label>
       <p class="privacy">No names, emails, phone numbers, or account IDs. This demo stores feedback in memory only and clears on restart.</p>
       <button type="submit">Submit feedback</button>
@@ -222,7 +226,7 @@ app.get("/", (req, res) => {
       <div id="list">${unlocked ? "Loading…" : '<p class="empty">Board locked.</p>'}</div>
     </details>
   </main>
-  <script src="/app.js"></script>
+  <script src="/app.js?v=2"></script>
 </body>
 </html>`);
 });
@@ -277,11 +281,18 @@ app.post("/api/feedback", submitLimiter, requireCsrf, (req, res) => {
   if (!["yes", "no", "skip"].includes(wouldRecommend)) wouldRecommend = "skip";
 
   const rating = Number(ratingRaw);
-  if (!sessionLabel || !whatWentWell || !whatCouldImprove) {
-    return res.status(400).json({ error: "All fields are required." });
-  }
+  const fieldErrors = {};
+  if (!sessionLabel) fieldErrors.sessionLabel = "Add a session label.";
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-    return res.status(400).json({ error: "Rating must be 1–5." });
+    fieldErrors.rating = "Choose a rating from 1 to 5.";
+  }
+  if (!whatWentWell) fieldErrors.whatWentWell = "Tell us what went well.";
+  if (!whatCouldImprove) fieldErrors.whatCouldImprove = "Tell us what could improve.";
+  if (Object.keys(fieldErrors).length) {
+    return res.status(400).json({
+      error: "Please fix the highlighted fields.",
+      fieldErrors,
+    });
   }
 
   const blob = `${sessionLabel}\n${whatWentWell}\n${whatCouldImprove}`;
