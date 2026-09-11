@@ -5,13 +5,28 @@ const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const cookieParser = require("cookie-parser");
 const crypto = require("crypto");
+const fs = require("fs");
 const path = require("path");
 
 const PORT = process.env.PORT || 8787;
 const SESSION_SECRET =
   process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 
-// In-memory store for the demo only — no durable PII, no minor identifiers.
+function loadDemoSecret() {
+  if (process.env.DEMO_ACCESS_SECRET) return process.env.DEMO_ACCESS_SECRET.trim();
+  const file = path.join(__dirname, ".demo-secret");
+  try {
+    return fs.readFileSync(file, "utf8").trim();
+  } catch {
+    return null;
+  }
+}
+
+const DEMO_ACCESS_SECRET = loadDemoSecret();
+if (!DEMO_ACCESS_SECRET) {
+  console.warn("WARNING: no DEMO_ACCESS_SECRET / .demo-secret — board stays locked.");
+}
+
 const feedback = [];
 const MAX_FEEDBACK = 200;
 const MAX_LEN = {
@@ -22,7 +37,6 @@ const MAX_LEN = {
 };
 
 const app = express();
-
 app.set("trust proxy", 1);
 
 app.use(
@@ -59,6 +73,22 @@ const submitLimiter = rateLimit({
   message: { error: "Too many submissions. Try again later." },
 });
 
+const unlockLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many unlock attempts." },
+});
+
+function timingSafeEqualStr(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const ba = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ba.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ba, bb);
+}
+
 function issueCsrf(req, res) {
   const token = crypto.randomBytes(24).toString("hex");
   res.cookie("csrf", token, {
@@ -80,6 +110,25 @@ function requireCsrf(req, res, next) {
   next();
 }
 
+function hasDemoAccess(req) {
+  if (!DEMO_ACCESS_SECRET) return false;
+  const cookieOk =
+    req.signedCookies.demo_access &&
+    timingSafeEqualStr(req.signedCookies.demo_access, DEMO_ACCESS_SECRET);
+  if (cookieOk) return true;
+  const auth = req.get("authorization") || "";
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  if (m && timingSafeEqualStr(m[1].trim(), DEMO_ACCESS_SECRET)) return true;
+  const q = typeof req.query.access === "string" ? req.query.access : "";
+  if (q && timingSafeEqualStr(q, DEMO_ACCESS_SECRET)) return true;
+  return false;
+}
+
+function requireDemoAccess(req, res, next) {
+  if (hasDemoAccess(req)) return next();
+  return res.status(401).json({ error: "Demo access required.", code: "DEMO_LOCKED" });
+}
+
 function sanitizeText(value, max) {
   if (typeof value !== "string") return "";
   return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").trim().slice(0, max);
@@ -96,6 +145,7 @@ function escapeHtml(s) {
 
 app.get("/", (req, res) => {
   const token = issueCsrf(req, res);
+  const unlocked = hasDemoAccess(req);
   res.type("html").send(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -113,7 +163,7 @@ app.get("/", (req, res) => {
       <p class="lede">For StudentBot to share how a Nerdy Tutors session went. Do not enter student names, emails, account IDs, or other personal identifiers.</p>
     </header>
     <form id="feedback-form" method="post" action="/api/feedback" novalidate>
-      <input type="hidden" name="_csrf" value="${escapeHtml(token)}" />
+      <input type="hidden" name="_csrf" id="csrf" value="${escapeHtml(token)}" />
       <label>
         Session label <span class="hint">(generic only, e.g. “math practice — week 3”)</span>
         <input name="sessionLabel" maxlength="80" required placeholder="math practice — week 3" autocomplete="off" />
@@ -139,8 +189,19 @@ app.get("/", (req, res) => {
       <p id="status" role="status" aria-live="polite"></p>
     </form>
     <section class="recent">
-      <h2>Recent submissions <span class="hint">(demo board)</span></h2>
-      <div id="list">Loading…</div>
+      <h2>Recent submissions <span class="hint">(demo board · gated)</span></h2>
+      <div id="unlock-wrap" ${unlocked ? "hidden" : ""}>
+        <p class="hint">Board requires the shared demo access secret (not for public tunnel visitors without it).</p>
+        <form id="unlock-form">
+          <label>
+            Demo access secret
+            <input type="password" name="secret" id="demo-secret" required autocomplete="off" />
+          </label>
+          <button type="submit">Unlock board</button>
+          <p id="unlock-status" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+      <div id="list">${unlocked ? "Loading…" : '<p class="empty">Locked until demo access is unlocked.</p>'}</div>
     </section>
   </main>
   <script src="/app.js"></script>
@@ -148,7 +209,30 @@ app.get("/", (req, res) => {
 </html>`);
 });
 
-app.get("/api/feedback", (req, res) => {
+app.get("/api/csrf", (req, res) => {
+  const token = issueCsrf(req, res);
+  res.json({ csrf: token });
+});
+
+app.post("/api/unlock", unlockLimiter, (req, res) => {
+  if (!DEMO_ACCESS_SECRET) {
+    return res.status(503).json({ error: "Demo access not configured." });
+  }
+  const provided = (req.body && (req.body.secret || req.body.access)) || "";
+  if (!timingSafeEqualStr(String(provided || ""), DEMO_ACCESS_SECRET)) {
+    return res.status(401).json({ error: "Invalid demo access secret." });
+  }
+  res.cookie("demo_access", DEMO_ACCESS_SECRET, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    signed: true,
+    maxAge: 8 * 60 * 60 * 1000,
+  });
+  res.json({ ok: true });
+});
+
+app.get("/api/feedback", requireDemoAccess, (req, res) => {
   res.json({
     count: feedback.length,
     items: feedback.slice(-25).reverse(),
@@ -156,7 +240,11 @@ app.get("/api/feedback", (req, res) => {
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true, service: "nerdy-feedback-demo" });
+  res.json({
+    ok: true,
+    service: "nerdy-feedback-demo",
+    boardGated: true,
+  });
 });
 
 app.post("/api/feedback", submitLimiter, requireCsrf, (req, res) => {
@@ -176,9 +264,11 @@ app.post("/api/feedback", submitLimiter, requireCsrf, (req, res) => {
     return res.status(400).json({ error: "Rating must be 1–5." });
   }
 
-  // Soft PII guard: reject obvious email / phone patterns in free text.
   const blob = `${sessionLabel}\n${whatWentWell}\n${whatCouldImprove}`;
-  if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(blob) || /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/.test(blob)) {
+  if (
+    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(blob) ||
+    /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/.test(blob)
+  ) {
     return res.status(400).json({
       error: "Remove personal contact details (email/phone) before submitting.",
     });
@@ -196,8 +286,8 @@ app.post("/api/feedback", submitLimiter, requireCsrf, (req, res) => {
   feedback.push(entry);
   if (feedback.length > MAX_FEEDBACK) feedback.shift();
 
-  issueCsrf(req, res);
-  res.status(201).json({ ok: true, id: entry.id });
+  const csrf = issueCsrf(req, res);
+  res.status(201).json({ ok: true, id: entry.id, csrf });
 });
 
 app.use((err, req, res, next) => {
