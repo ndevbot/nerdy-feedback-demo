@@ -15,6 +15,7 @@
   const panelStudent = document.getElementById("panel-student");
   const panelStaff = document.getElementById("panel-staff");
   const tabs = document.querySelectorAll(".tab");
+  var lastEntry = null;
 
   function escapeHtml(s) {
     return String(s)
@@ -38,13 +39,24 @@
   function showFieldErrors(fieldErrors) {
     clearFieldErrors();
     if (!fieldErrors) return;
-    Object.keys(fieldErrors).forEach(function (k) {
+    var order = ["sessionLabel", "rating", "whatWentWell", "whatCouldImprove"];
+    var firstKey = null;
+    order.forEach(function (k) {
+      if (!fieldErrors[k]) return;
       var el = document.getElementById("err-" + k);
       if (el) {
         el.textContent = fieldErrors[k];
         el.hidden = false;
       }
+      if (!firstKey) firstKey = k;
     });
+    if (firstKey === "rating") {
+      var fs = document.getElementById("rating-fieldset");
+      if (fs) fs.querySelector("input") && fs.querySelector("input").focus();
+    } else if (firstKey) {
+      var focusEl = document.getElementById(firstKey);
+      if (focusEl) focusEl.focus();
+    }
   }
 
   function setCsrf(token) {
@@ -64,6 +76,7 @@
   }
 
   function showSaved(entry) {
+    lastEntry = entry;
     savedSummary.innerHTML =
       "<strong>" +
       escapeHtml(entry.sessionLabel) +
@@ -135,30 +148,65 @@
     }
   }
 
+  function clearOneFieldError(id) {
+    var el = document.getElementById("err-" + id);
+    if (el) { el.hidden = true; el.textContent = ""; }
+    maybeClearStatusSummary();
+  }
+
+  function maybeClearStatusSummary() {
+    var ids = ["sessionLabel", "rating", "whatWentWell", "whatCouldImprove"];
+    var anyVisible = ids.some(function (id) {
+      var el = document.getElementById("err-" + id);
+      return el && !el.hidden && el.textContent;
+    });
+    if (!anyVisible && status && status.textContent.indexOf("Please fix") === 0) {
+      status.textContent = "";
+    }
+  }
+
   // Clear field errors as the student fixes them (StudentBot feedback).
   var sessionInput = document.getElementById("sessionLabel");
   if (sessionInput) {
-    sessionInput.addEventListener("input", function () {
-      var el = document.getElementById("err-sessionLabel");
-      if (el) { el.hidden = true; el.textContent = ""; }
-    });
+    sessionInput.addEventListener("input", function () { clearOneFieldError("sessionLabel"); });
   }
   document.querySelectorAll('input[name="rating"]').forEach(function (r) {
-    r.addEventListener("change", function () {
-      var el = document.getElementById("err-rating");
-      if (el) { el.hidden = true; el.textContent = ""; }
-    });
+    r.addEventListener("change", function () { clearOneFieldError("rating"); });
   });
   ["whatWentWell", "whatCouldImprove"].forEach(function (id) {
     var ta = document.getElementById(id);
     if (!ta) return;
-    ta.addEventListener("input", function () {
-      var el = document.getElementById("err-" + id);
-      if (el) { el.hidden = true; el.textContent = ""; }
+    ta.addEventListener("input", function () { clearOneFieldError(id); });
+  });
+
+
+  // Subject chips
+  document.querySelectorAll("#subject-chips .chip").forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      var input = document.getElementById("sessionLabel");
+      if (!input) return;
+      var label = chip.getAttribute("data-chip") || chip.textContent;
+      input.value = label + " session";
+      clearOneFieldError("sessionLabel");
+      input.focus();
     });
   });
 
-  form.addEventListener("submit", async function (e) {
+  function bindCount(id, suffix) {
+    var ta = document.getElementById(id);
+    var out = document.getElementById(id + "-count");
+    if (!ta || !out) return;
+    function sync() {
+      out.textContent = ta.value.length + " / 1000" + (suffix || "");
+    }
+    ta.addEventListener("input", sync);
+    sync();
+  }
+  bindCount("whatWentWell", "");
+  bindCount("whatCouldImprove", " · short is fine");
+
+
+    form.addEventListener("submit", async function (e) {
     e.preventDefault();
     status.textContent = "Submitting…";
     clearFieldErrors();
@@ -187,7 +235,7 @@
         form.reset();
       }
     } catch (err) {
-      status.textContent = "Network error.";
+      status.textContent = "Couldn’t reach the server — check your connection or try again in a moment.";
     }
   });
 
@@ -196,12 +244,52 @@
       savedPanel.hidden = true;
       form.hidden = false;
       form.reset();
+      lastEntry = null;
       var skip = form.querySelector('input[name="wouldRecommend"][value="skip"]');
       if (skip) skip.checked = true;
       await refreshCsrf();
       status.textContent = "";
     });
   }
+
+  var editSaved = document.getElementById("edit-saved");
+  if (editSaved) {
+    editSaved.addEventListener("click", async function () {
+      if (!lastEntry) return;
+      savedPanel.hidden = true;
+      form.hidden = false;
+      document.getElementById("sessionLabel").value = lastEntry.sessionLabel || "";
+      document.getElementById("whatWentWell").value = lastEntry.whatWentWell || "";
+      document.getElementById("whatCouldImprove").value = lastEntry.whatCouldImprove || "";
+      var rating = String(lastEntry.rating || "");
+      var radio = form.querySelector('input[name="rating"][value="' + rating + '"]');
+      if (radio) radio.checked = true;
+      var rec = lastEntry.wouldRecommend || "skip";
+      var recEl = form.querySelector('input[name="wouldRecommend"][value="' + rec + '"]');
+      if (recEl) recEl.checked = true;
+      document.getElementById("whatWentWell").dispatchEvent(new Event("input"));
+      document.getElementById("whatCouldImprove").dispatchEvent(new Event("input"));
+      await refreshCsrf();
+      status.textContent = "Edit and submit again to replace this draft locally.";
+      document.getElementById("sessionLabel").focus();
+    });
+  }
+
+  var copyReceipt = document.getElementById("copy-receipt");
+  if (copyReceipt) {
+    copyReceipt.addEventListener("click", async function () {
+      if (!lastEntry) return;
+      var text = "Nerdy Tutors feedback receipt (demo)\nSession: " + lastEntry.sessionLabel + "\nRating: " + lastEntry.rating + "/5";
+      try {
+        await navigator.clipboard.writeText(text);
+        copyReceipt.textContent = "Copied";
+        setTimeout(function () { copyReceipt.textContent = "Copy receipt"; }, 1500);
+      } catch (e) {
+        status.textContent = "Couldn’t copy — select and copy manually.";
+      }
+    });
+  }
+
 
   tabs.forEach(function (t) {
     t.addEventListener("click", function () {

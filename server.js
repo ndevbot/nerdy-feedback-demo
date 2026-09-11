@@ -146,7 +146,7 @@ app.get("/", (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex,nofollow" />
   <title>Nerdy Tutors — Session Feedback (Demo)</title>
-  <link rel="stylesheet" href="/styles.css?v=7" />
+  <link rel="stylesheet" href="/styles.css?v=9" />
 </head>
 <body>
   <div class="shell">
@@ -169,7 +169,7 @@ app.get("/", (req, res) => {
         <div class="hero">
           <p class="eyebrow">For students</p>
           <h1>How did your tutoring session go?</h1>
-          <p class="lede">Takes about a minute. No account needed — just tell us what helped and what could be better. Please skip real names, emails, and account IDs.</p>
+          <p class="lede">Get unstuck with a tutor — then tell us how it went. Takes about a minute, no account needed. Please skip real names, emails, and account IDs.</p>
           <p class="cta-row"><a class="cta" href="#feedback-form">Share session feedback</a></p>
           <ul class="hero-points">
             <li>Private to this demo — no login</li>
@@ -181,17 +181,27 @@ app.get("/", (req, res) => {
         <section id="saved-panel" class="saved" hidden>
           <h2>Feedback saved</h2>
           <p id="saved-summary" class="lede"></p>
-          <button type="button" id="submit-another">Submit another response</button>
+          <div class="saved-actions">
+            <button type="button" id="edit-saved">Edit this response</button>
+            <button type="button" id="copy-receipt" class="secondary">Copy receipt</button>
+            <button type="button" id="submit-another">Submit another response</button>
+          </div>
         </section>
 
         <form id="feedback-form" method="post" action="/api/feedback" novalidate>
           <input type="hidden" name="_csrf" id="csrf" value="${escapeHtml(token)}" />
+          <div class="chips" id="subject-chips" aria-label="Subject quick picks">
+            <button type="button" class="chip" data-chip="Math">Math</button>
+            <button type="button" class="chip" data-chip="Science">Science</button>
+            <button type="button" class="chip" data-chip="Writing">Writing</button>
+            <button type="button" class="chip" data-chip="Test prep">Test prep</button>
+          </div>
           <label>
             Session label <span class="req" aria-hidden="true">*</span> <span class="hint">(generic only, e.g. “math practice — week 3”)</span>
-            <input name="sessionLabel" id="sessionLabel" maxlength="80" required placeholder="math practice — week 3" autocomplete="off" />
+            <input name="sessionLabel" id="sessionLabel" maxlength="80" required placeholder="math practice — week 3" autocomplete="off" aria-describedby="err-sessionLabel" />
             <p class="field-error" id="err-sessionLabel" hidden></p>
           </label>
-          <fieldset id="rating-fieldset">
+          <fieldset id="rating-fieldset" aria-describedby="err-rating">
             <legend>Overall rating <span class="req" aria-hidden="true">*</span></legend>
             <label class="radio"><input type="radio" name="rating" value="5" required /> 5 — excellent</label>
             <label class="radio"><input type="radio" name="rating" value="4" /> 4 — good</label>
@@ -208,17 +218,21 @@ app.get("/", (req, res) => {
           </fieldset>
           <label>
             What went well <span class="req" aria-hidden="true">*</span>
-            <textarea name="whatWentWell" id="whatWentWell" maxlength="1000" rows="3" required placeholder="Topics covered, pacing, clarity…"></textarea>
+            <textarea name="whatWentWell" id="whatWentWell" maxlength="1000" rows="3" required placeholder="Topics covered, pacing, clarity…" aria-describedby="err-whatWentWell whatWentWell-count"></textarea>
+            <p class="count" id="whatWentWell-count">0 / 1000</p>
             <p class="field-error" id="err-whatWentWell" hidden></p>
           </label>
           <label>
             What could improve <span class="req" aria-hidden="true">*</span>
-            <textarea name="whatCouldImprove" id="whatCouldImprove" maxlength="1000" rows="3" required placeholder="Gaps, confusion, UX friction…"></textarea>
+            <textarea name="whatCouldImprove" id="whatCouldImprove" maxlength="1000" rows="3" required placeholder="Gaps, confusion, UX friction…" aria-describedby="err-whatCouldImprove whatCouldImprove-count"></textarea>
+            <p class="count" id="whatCouldImprove-count">0 / 1000 · short is fine</p>
             <p class="field-error" id="err-whatCouldImprove" hidden></p>
           </label>
           <p class="privacy">No names, emails, phone numbers, or account IDs. Demo stores feedback in memory only and clears on restart.</p>
-          <button type="submit">Submit feedback</button>
-          <p id="status" role="status" aria-live="polite"></p>
+          <div class="submit-bar">
+            <button type="submit">Submit feedback</button>
+            <p id="status" role="status" aria-live="polite"></p>
+          </div>
         </form>
       </section>
 
@@ -249,7 +263,7 @@ app.get("/", (req, res) => {
       </section>
     </main>
   </div>
-  <script src="/app.js?v=7"></script>
+  <script src="/app.js?v=9"></script>
 </body>
 </html>`);
 });
