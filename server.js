@@ -146,7 +146,7 @@ app.get("/", (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex,nofollow" />
   <title>Nerdy Tutors — Session Feedback (Demo)</title>
-  <link rel="stylesheet" href="/styles.css?v=6" />
+  <link rel="stylesheet" href="/styles.css?v=7" />
 </head>
 <body>
   <div class="shell">
@@ -170,6 +170,12 @@ app.get("/", (req, res) => {
           <p class="eyebrow">For students</p>
           <h1>How did your tutoring session go?</h1>
           <p class="lede">Takes about a minute. No account needed — just tell us what helped and what could be better. Please skip real names, emails, and account IDs.</p>
+          <p class="cta-row"><a class="cta" href="#feedback-form">Share session feedback</a></p>
+          <ul class="hero-points">
+            <li>Private to this demo — no login</li>
+            <li>Focus on the session, not personal details</li>
+            <li>Staff review lives on a separate tab</li>
+          </ul>
         </div>
 
         <section id="saved-panel" class="saved" hidden>
@@ -243,7 +249,7 @@ app.get("/", (req, res) => {
       </section>
     </main>
   </div>
-  <script src="/app.js?v=6"></script>
+  <script src="/app.js?v=7"></script>
 </body>
 </html>`);
 });

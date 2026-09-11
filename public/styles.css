@@ -91,3 +91,21 @@ button.linkish {
 .req { color: #b42318; font-weight: 700; }
 .field-error { color: #b42318; font-size: 0.85rem; font-weight: 600; margin: 0.35rem 0 0; }
 code { font-size: 0.95em; }
+
+.cta-row { margin: 1rem 0 0.75rem; }
+a.cta {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff !important;
+  text-decoration: none;
+  font-weight: 700;
+  padding: 0.75rem 1.2rem;
+  border-radius: 999px;
+}
+a.cta:hover { filter: brightness(1.05); }
+.hero-points {
+  margin: 0.75rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
