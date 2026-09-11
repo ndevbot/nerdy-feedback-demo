@@ -135,6 +135,29 @@
     }
   }
 
+  // Clear field errors as the student fixes them (StudentBot feedback).
+  var sessionInput = document.getElementById("sessionLabel");
+  if (sessionInput) {
+    sessionInput.addEventListener("input", function () {
+      var el = document.getElementById("err-sessionLabel");
+      if (el) { el.hidden = true; el.textContent = ""; }
+    });
+  }
+  document.querySelectorAll('input[name="rating"]').forEach(function (r) {
+    r.addEventListener("change", function () {
+      var el = document.getElementById("err-rating");
+      if (el) { el.hidden = true; el.textContent = ""; }
+    });
+  });
+  ["whatWentWell", "whatCouldImprove"].forEach(function (id) {
+    var ta = document.getElementById(id);
+    if (!ta) return;
+    ta.addEventListener("input", function () {
+      var el = document.getElementById("err-" + id);
+      if (el) { el.hidden = true; el.textContent = ""; }
+    });
+  });
+
   form.addEventListener("submit", async function (e) {
     e.preventDefault();
     status.textContent = "Submitting…";
