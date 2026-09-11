@@ -356,7 +356,7 @@
         }
         staffStatus.textContent = "";
         if (data.csrf) setStaffCsrf(data.csrf);
-        if (staffWho) staffWho.textContent = data.username;
+        if (staffWho) staffWho.textContent = data.label || "Staff session";
         staffGate.hidden = true;
         staffBoard.hidden = false;
         await refreshBoard();

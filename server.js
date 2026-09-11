@@ -145,7 +145,7 @@ function escapeHtml(s) {
 app.get("/", (req, res) => {
   const token = issueCsrf(req, res);
   const staff = hasStaffAccess(req);
-  const staffUser = staff ? escapeHtml(req.signedCookies.staff_user) : "";
+  const staffUser = staff ? "Staff session" : "";
   res.type("html").send(`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -153,7 +153,7 @@ app.get("/", (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex,nofollow" />
   <title>Nerdy Tutors — Session Feedback (Demo)</title>
-  <link rel="stylesheet" href="/styles.css?v=10" />
+  <link rel="stylesheet" href="/styles.css?v=11" />
 </head>
 <body>
   <div class="shell">
@@ -272,7 +272,7 @@ app.get("/", (req, res) => {
       </section>
     </main>
   </div>
-  <script src="/app.js?v=10"></script>
+  <script src="/app.js?v=11"></script>
 </body>
 </html>`);
 });
@@ -294,7 +294,7 @@ app.post("/api/staff/signin", staffLimiter, requireCsrf, (req, res) => {
   const opts = { ...staffCookieOpts(req), maxAge: 60 * 60 * 1000 }; // ≤1h
   res.cookie("staff_user", username, opts);
   const csrf = issueCsrf(req, res);
-  res.json({ ok: true, username, csrf });
+  res.json({ ok: true, label: "Staff session", csrf });
 });
 
 app.post("/api/staff/signout", requireCsrf, (req, res) => {

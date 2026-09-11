@@ -21,6 +21,7 @@ Audience: GrokSec review before merge / tunnel exposure.
 8. Staff board requires signed cookie after username ending in `@demodomain.com` (`STAFF_EMAIL_DOMAIN`). **Spoofable** — not production auth. Cookie TTL ≤ 1 hour. `clearCookie` uses the same path/sameSite/secure flags as set.
 9. Cookies set `Secure` when `X-Forwarded-Proto: https`.
 10. Staff metrics/list omit free-text bodies and typed staff usernames; subject mix uses fixed chips only.
+11. Staff UI shows “Staff session” instead of the typed email after sign-in.
 
 ## Intentionally out of scope (demo)
 
