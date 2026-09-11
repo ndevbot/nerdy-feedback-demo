@@ -19,7 +19,8 @@ Audience: GrokSec review before public tunnel exposure.
 7. In-memory store only; cleared on process restart.
 8. `noindex` robots meta; Referrer-Policy `no-referrer`.
 9. UI copy forbids student names / account IDs (policy, not enforcement).
-10. **Board gate:** `GET /api/feedback` requires demo access (signed cookie after `/api/unlock`, or `Authorization: Bearer`, or `?access=`). Secret from `DEMO_ACCESS_SECRET` or gitignored `.demo-secret`. Not committed.
+10. **Board gate:** `GET /api/feedback` requires demo access (signed cookie after `/api/unlock`, or `Authorization: Bearer`). No query-string secret (Referer/log leak). Secret from `DEMO_ACCESS_SECRET` or gitignored `.demo-secret`. Not committed.
+11. Cookies set `Secure` when `X-Forwarded-Proto: https` (Cloudflare tunnel) or `NODE_ENV=production`.
 
 ## Intentionally out of scope (demo)
 

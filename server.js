@@ -81,6 +81,12 @@ const unlockLimiter = rateLimit({
   message: { error: "Too many unlock attempts." },
 });
 
+function cookieSecure(req) {
+  if (process.env.NODE_ENV === "production") return true;
+  const xf = (req.get("x-forwarded-proto") || "").split(",")[0].trim();
+  return xf === "https";
+}
+
 function timingSafeEqualStr(a, b) {
   if (typeof a !== "string" || typeof b !== "string") return false;
   const ba = Buffer.from(a);
@@ -94,7 +100,7 @@ function issueCsrf(req, res) {
   res.cookie("csrf", token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: cookieSecure(req),
     signed: true,
     maxAge: 60 * 60 * 1000,
   });
@@ -119,8 +125,6 @@ function hasDemoAccess(req) {
   const auth = req.get("authorization") || "";
   const m = auth.match(/^Bearer\s+(.+)$/i);
   if (m && timingSafeEqualStr(m[1].trim(), DEMO_ACCESS_SECRET)) return true;
-  const q = typeof req.query.access === "string" ? req.query.access : "";
-  if (q && timingSafeEqualStr(q, DEMO_ACCESS_SECRET)) return true;
   return false;
 }
 
@@ -225,7 +229,7 @@ app.post("/api/unlock", unlockLimiter, (req, res) => {
   res.cookie("demo_access", DEMO_ACCESS_SECRET, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: cookieSecure(req),
     signed: true,
     maxAge: 8 * 60 * 60 * 1000,
   });
