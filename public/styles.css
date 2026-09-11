@@ -129,3 +129,28 @@ button.secondary { background: #eef3f9; color: var(--ink); }
   .submit-bar button { width: 100%; }
   .top { padding: 0.75rem 1rem; }
 }
+
+.metrics {
+  background: #eef3f9;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1rem;
+  margin: 0.75rem 0 1rem;
+}
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.metric {
+  background: #fff;
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+}
+.metric-label { display: block; color: var(--muted); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.metric-value { display: block; font-size: 1.25rem; font-weight: 800; margin-top: 0.2rem; }
+.metric-small { font-size: 0.8rem; font-weight: 600; word-break: break-all; }
+.metric-row { color: var(--muted); font-size: 0.9rem; margin-top: 0.35rem; }
+.staff-list-title { font-size: 1rem; margin: 1rem 0 0.5rem; }
