@@ -51,7 +51,7 @@ body {
   padding: 0.55rem 1rem; border-radius: 999px; font: inherit; font-weight: 700; cursor: pointer;
 }
 .tab.active { background: white; color: var(--ink); box-shadow: 0 1px 3px rgba(15,27,45,0.08); }
-.wrap { max-width: 820px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+.wrap { max-width: 920px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
 .hero { margin-bottom: 1.25rem; }
 .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; color: var(--accent-2); font-weight: 700; margin: 0 0 0.5rem; }
 h1 { margin: 0 0 0.5rem; font-size: 1.85rem; }
@@ -108,4 +108,24 @@ a.cta:hover { filter: brightness(1.05); }
   padding-left: 1.1rem;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 1rem; }
+.chip {
+  border: 1px solid var(--line); background: #fff; color: var(--ink);
+  border-radius: 999px; padding: 0.4rem 0.85rem; font: inherit; font-weight: 600; cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); color: var(--accent-2); }
+.count { margin: 0.25rem 0 0; font-size: 0.8rem; font-weight: 500; color: var(--muted); }
+.submit-bar {
+  position: sticky; bottom: 0; background: linear-gradient(transparent, #fff 30%);
+  padding-top: 1rem; margin-top: 0.5rem;
+}
+.saved-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+button.secondary { background: #eef3f9; color: var(--ink); }
+@media (max-width: 640px) {
+  .wrap { padding: 1rem 1rem 5rem; }
+  h1 { font-size: 1.45rem; }
+  .submit-bar button { width: 100%; }
+  .top { padding: 0.75rem 1rem; }
 }
