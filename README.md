@@ -19,7 +19,8 @@ Repo: https://github.com/ndevbot/nerdy-feedback-demo
 - Field errors clear on input; summary “Please fix…” clears when all are fixed
 - Staff board API gated behind staff cookie
 - Staff UI labels the session as “Staff session” (no typed email on screen)
-- Staff metrics: volume, avg rating, rating bars, recommend mix, subject mix (synonym-aware chips), friendly timestamps; ops under Demo diagnostics; recent activity rating filters
+- Staff metrics: volume, avg rating, rating bars, recommend mix, subject mix (expanded synonym map: languages/reading/history → Writing, etc.), friendly timestamps; ops under Demo diagnostics; recent activity rating filters
+- Student form nudges subject chips so Staff subject mix stays usable
 - In-memory store only (clears on process restart)
 
 ## Run
@@ -64,6 +65,7 @@ Prioritized student asks still open or in flight:
 3. Soft success share — copy a receipt (session label + rating only)
 4. Stronger nerdy.com visual parity (illustration / marketing chrome)
 5. Confirmation email — deferred until a real mail path exists
+6. ~~Widen subject synonyms (spanish / reading / AP History → Writing; confirm geometry/physics)~~ (PR #6)
 
 DevBot hygiene / ops:
 
