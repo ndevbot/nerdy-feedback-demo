@@ -202,13 +202,12 @@
       e.preventDefault();
       staffStatus.textContent = "Checking…";
       var username = document.getElementById("staff-username").value;
-      var secret = document.getElementById("staff-secret").value;
       try {
         const res = await fetch("/api/staff/signin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "same-origin",
-          body: JSON.stringify({ username: username, secret: secret, _csrf: staffCsrf() }),
+          body: JSON.stringify({ username: username, _csrf: staffCsrf() }),
         });
         const data = await res.json().catch(function () {
           return {};
@@ -225,7 +224,6 @@
         staffStatus.textContent = "";
         if (data.csrf) setStaffCsrf(data.csrf);
         if (staffWho) staffWho.textContent = data.username;
-        document.getElementById("staff-secret").value = "";
         staffGate.hidden = true;
         staffBoard.hidden = false;
         await refreshBoard();
