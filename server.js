@@ -197,6 +197,7 @@ app.get("/", (req, res) => {
 
         <form id="feedback-form" method="post" action="/api/feedback" novalidate>
           <input type="hidden" name="_csrf" id="csrf" value="${escapeHtml(token)}" />
+          <p class="hint chip-hint">Pick a subject chip when you can — Staff metrics group by these categories.</p>
           <div class="chips" id="subject-chips" aria-label="Subject quick picks">
             <button type="button" class="chip" data-chip="Math">Math</button>
             <button type="button" class="chip" data-chip="Science">Science</button>
@@ -204,7 +205,7 @@ app.get("/", (req, res) => {
             <button type="button" class="chip" data-chip="Test prep">Test prep</button>
           </div>
           <label>
-            Session label <span class="req" aria-hidden="true">*</span> <span class="hint">(generic only, e.g. “math practice — week 3”)</span>
+            Session label <span class="req" aria-hidden="true">*</span> <span class="hint">(generic only — prefer a chip, or e.g. “spanish practice — week 3”)</span>
             <input name="sessionLabel" id="sessionLabel" maxlength="80" required placeholder="math practice — week 3" autocomplete="off" aria-describedby="err-sessionLabel" />
             <p class="field-error" id="err-sessionLabel" hidden></p>
           </label>
@@ -316,10 +317,10 @@ function chipSubject(sessionLabel) {
   const label = String(sessionLabel || "").toLowerCase();
   if (!label.trim()) return "Other";
   // Match fixed chips + common student free-text synonyms (still no free-text displayed).
-  if (/(math|algebra|geometry|calculus|trig)/.test(label)) return "Math";
-  if (/(science|chem|biology|\bbio\b|physics)/.test(label)) return "Science";
-  if (/(writing|essay|english|grammar)/.test(label)) return "Writing";
-  if (/(test prep|\bsat\b|\bact\b|exam prep|gre|gmat)/.test(label)) return "Test prep";
+  if (/(math|algebra|geometry|calculus|trig|arithm|statistics|\bstats\b)/.test(label)) return "Math";
+  if (/(science|chem|biology|\bbio\b|physics|earth science)/.test(label)) return "Science";
+  if (/(writing|essay|english|grammar|reading|literature|spanish|french|language|history|\bap\b\s*history|social studies|humanities)/.test(label)) return "Writing";
+  if (/(test prep|\bsat\b|\bact\b|exam prep|gre|gmat|\bpsat\b)/.test(label)) return "Test prep";
   for (const chip of SUBJECT_CHIPS) {
     const c = chip.toLowerCase();
     if (label === c || label.startsWith(c + " ") || label.includes(c)) return chip;
@@ -465,6 +466,11 @@ function seedSyntheticFeedback() {
     { sessionLabel: "Science session", rating: 4, wouldRecommend: "yes", whatWentWell: "Good visuals", whatCouldImprove: "Slower on formulas" },
     { sessionLabel: "Writing session", rating: 3, wouldRecommend: "skip", whatWentWell: "Outline help", whatCouldImprove: "More examples" },
     { sessionLabel: "Test prep session", rating: 5, wouldRecommend: "yes", whatWentWell: "Timed drills", whatCouldImprove: "Harder stretch questions" },
+    { sessionLabel: "geometry review", rating: 4, wouldRecommend: "yes", whatWentWell: "Proof walkthrough", whatCouldImprove: "More diagrams" },
+    { sessionLabel: "physics lab help", rating: 5, wouldRecommend: "yes", whatWentWell: "Forces clicked", whatCouldImprove: "Units practice" },
+    { sessionLabel: "spanish practice", rating: 4, wouldRecommend: "yes", whatWentWell: "Conversation drills", whatCouldImprove: "Vocab list" },
+    { sessionLabel: "reading comprehension", rating: 3, wouldRecommend: "skip", whatWentWell: "Passage strategy", whatCouldImprove: "More timed sets" },
+    { sessionLabel: "AP History essay", rating: 4, wouldRecommend: "yes", whatWentWell: "Thesis clarity", whatCouldImprove: "Evidence packing" },
     { sessionLabel: "custom free text", rating: 2, wouldRecommend: "no", whatWentWell: "Tried hard", whatCouldImprove: "Different approach" },
   ];
   for (const s of samples) {
