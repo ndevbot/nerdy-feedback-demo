@@ -16,6 +16,7 @@ Repo: https://github.com/ndevbot/nerdy-feedback-demo
 - Optional “would recommend?”
 - Subject chips + free-text session label
 - Character counts on text areas
+- Field errors clear on input; summary “Please fix…” clears when all are fixed
 - Staff board API gated behind staff cookie
 - In-memory store only (clears on process restart)
 

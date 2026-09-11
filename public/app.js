@@ -148,27 +148,35 @@
     }
   }
 
+  function clearOneFieldError(id) {
+    var el = document.getElementById("err-" + id);
+    if (el) { el.hidden = true; el.textContent = ""; }
+    maybeClearStatusSummary();
+  }
+
+  function maybeClearStatusSummary() {
+    var ids = ["sessionLabel", "rating", "whatWentWell", "whatCouldImprove"];
+    var anyVisible = ids.some(function (id) {
+      var el = document.getElementById("err-" + id);
+      return el && !el.hidden && el.textContent;
+    });
+    if (!anyVisible && status && status.textContent.indexOf("Please fix") === 0) {
+      status.textContent = "";
+    }
+  }
+
   // Clear field errors as the student fixes them (StudentBot feedback).
   var sessionInput = document.getElementById("sessionLabel");
   if (sessionInput) {
-    sessionInput.addEventListener("input", function () {
-      var el = document.getElementById("err-sessionLabel");
-      if (el) { el.hidden = true; el.textContent = ""; }
-    });
+    sessionInput.addEventListener("input", function () { clearOneFieldError("sessionLabel"); });
   }
   document.querySelectorAll('input[name="rating"]').forEach(function (r) {
-    r.addEventListener("change", function () {
-      var el = document.getElementById("err-rating");
-      if (el) { el.hidden = true; el.textContent = ""; }
-    });
+    r.addEventListener("change", function () { clearOneFieldError("rating"); });
   });
   ["whatWentWell", "whatCouldImprove"].forEach(function (id) {
     var ta = document.getElementById(id);
     if (!ta) return;
-    ta.addEventListener("input", function () {
-      var el = document.getElementById("err-" + id);
-      if (el) { el.hidden = true; el.textContent = ""; }
-    });
+    ta.addEventListener("input", function () { clearOneFieldError(id); });
   });
 
 
@@ -179,8 +187,7 @@
       if (!input) return;
       var label = chip.getAttribute("data-chip") || chip.textContent;
       input.value = label + " session";
-      var el = document.getElementById("err-sessionLabel");
-      if (el) { el.hidden = true; el.textContent = ""; }
+      clearOneFieldError("sessionLabel");
       input.focus();
     });
   });
