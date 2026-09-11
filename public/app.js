@@ -104,19 +104,48 @@
     if (name === "staff" && staffBoard && !staffBoard.hidden) refreshBoard();
   }
 
+  function renderMetrics(m) {
+    var el = document.getElementById("metrics");
+    if (!el) return;
+    if (!m) {
+      el.innerHTML = '<p class="empty">No metrics yet.</p>';
+      return;
+    }
+    var hist = m.ratingHistogram || {};
+    var rec = m.recommend || {};
+    var sub = m.subjectMix || {};
+    el.innerHTML =
+      '<div class="metric-grid">' +
+      '<div class="metric"><span class="metric-label">Submissions</span><span class="metric-value">' + escapeHtml(String(m.totalSubmissions || 0)) + '</span></div>' +
+      '<div class="metric"><span class="metric-label">Avg rating</span><span class="metric-value">' + escapeHtml(m.avgRating == null ? "—" : String(m.avgRating)) + '</span></div>' +
+      '<div class="metric"><span class="metric-label">Last submit</span><span class="metric-value metric-small">' + escapeHtml(m.lastSubmitAt || "—") + '</span></div>' +
+      '<div class="metric"><span class="metric-label">Staff cookie TTL</span><span class="metric-value">' + escapeHtml(String(m.staffCookieTtlSeconds || 3600)) + 's</span></div>' +
+      '<div class="metric"><span class="metric-label">Soft PII rejects</span><span class="metric-value">' + escapeHtml(String(m.softPiiRejects || 0)) + '</span></div>' +
+      '<div class="metric"><span class="metric-label">Staff sign-ins</span><span class="metric-value">' + escapeHtml(String(m.staffSignins || 0)) + '</span></div>' +
+      '</div>' +
+      '<div class="metric-row"><strong>Ratings 1–5:</strong> ' +
+      [1,2,3,4,5].map(function (n) { return n + "★ " + (hist[n] || 0); }).join(" · ") +
+      '</div>' +
+      '<div class="metric-row"><strong>Recommend:</strong> yes ' + (rec.yes || 0) + ' · no ' + (rec.no || 0) + ' · skip ' + (rec.skip || 0) + '</div>' +
+      '<div class="metric-row"><strong>Subjects (chips only):</strong> Math ' + (sub.Math || 0) + ' · Science ' + (sub.Science || 0) + ' · Writing ' + (sub.Writing || 0) + ' · Test prep ' + (sub["Test prep"] || 0) + ' · Other ' + (sub.Other || 0) + '</div>';
+  }
+
   async function refreshBoard() {
     if (!list) return;
     try {
       const res = await fetch("/api/feedback", { credentials: "same-origin" });
       if (res.status === 401) {
         list.innerHTML = "";
+        var metrics = document.getElementById("metrics");
+        if (metrics) metrics.innerHTML = "";
         if (staffGate) staffGate.hidden = false;
         if (staffBoard) staffBoard.hidden = true;
         return;
       }
       const data = await res.json();
+      renderMetrics(data.metrics);
       if (!data.items || !data.items.length) {
-        list.innerHTML = '<p class="empty">No feedback yet.</p>';
+        list.innerHTML = '<p class="empty">No submissions yet — metrics will fill as students submit synthetic feedback.</p>';
         return;
       }
       list.innerHTML = data.items
@@ -128,23 +157,16 @@
             "/5 · " +
             escapeHtml(recommendLabel(item.wouldRecommend)) +
             " · " +
+            escapeHtml(item.subject || "Other") +
+            " · " +
             escapeHtml(item.createdAt) +
             "</div>" +
-            "<strong>" +
-            escapeHtml(item.sessionLabel) +
-            "</strong>" +
-            "<p><em>Went well:</em> " +
-            escapeHtml(item.whatWentWell) +
-            "</p>" +
-            "<p><em>Improve:</em> " +
-            escapeHtml(item.whatCouldImprove) +
-            "</p>" +
             "</article>"
           );
         })
         .join("");
     } catch (e) {
-      list.innerHTML = '<p class="empty">Could not load feedback.</p>';
+      list.innerHTML = '<p class="empty">Couldn’t load the staff board — try again in a moment.</p>';
     }
   }
 

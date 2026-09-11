@@ -18,6 +18,7 @@ Repo: https://github.com/ndevbot/nerdy-feedback-demo
 - Character counts on text areas
 - Field errors clear on input; summary “Please fix…” clears when all are fixed
 - Staff board API gated behind staff cookie
+- Staff metrics: volume, avg/histogram ratings, recommend mix, chip-subject mix, last submit, soft-PII rejects (no free-text / PII)
 - In-memory store only (clears on process restart)
 
 ## Run

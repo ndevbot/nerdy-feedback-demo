@@ -14,6 +14,13 @@ const STAFF_DOMAIN = (process.env.STAFF_EMAIL_DOMAIN || "demodomain.com").toLowe
 
 const feedback = [];
 const MAX_FEEDBACK = 200;
+const ops = {
+  rateLimitedSubmits: 0,
+  softPiiRejects: 0,
+  staffSignins: 0,
+  startedAt: new Date().toISOString(),
+};
+const SUBJECT_CHIPS = ["Math", "Science", "Writing", "Test prep"];
 const MAX_LEN = {
   sessionLabel: 80,
   rating: 1,
@@ -146,7 +153,7 @@ app.get("/", (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex,nofollow" />
   <title>Nerdy Tutors — Session Feedback (Demo)</title>
-  <link rel="stylesheet" href="/styles.css?v=9" />
+  <link rel="stylesheet" href="/styles.css?v=10" />
 </head>
 <body>
   <div class="shell">
@@ -258,12 +265,14 @@ app.get("/", (req, res) => {
 
         <div id="staff-board" ${staff ? "" : "hidden"}>
           <p class="hint">Signed in as <strong id="staff-who">${staffUser}</strong> · <button type="button" id="staff-signout" class="linkish">Sign out</button></p>
+          <div id="metrics" class="metrics" aria-live="polite">${staff ? "Loading metrics…" : ""}</div>
+          <h2 class="staff-list-title">Recent submissions <span class="hint">(aggregates / chip subject only — no free-text)</span></h2>
           <div id="list">${staff ? "Loading…" : ""}</div>
         </div>
       </section>
     </main>
   </div>
-  <script src="/app.js?v=9"></script>
+  <script src="/app.js?v=10"></script>
 </body>
 </html>`);
 });
@@ -281,6 +290,7 @@ app.post("/api/staff/signin", staffLimiter, requireCsrf, (req, res) => {
     });
   }
   // Demo-only: domain suffix gate is spoofable; residual risk accepted for this demo.
+  ops.staffSignins += 1;
   const opts = { ...staffCookieOpts(req), maxAge: 60 * 60 * 1000 }; // ≤1h
   res.cookie("staff_user", username, opts);
   const csrf = issueCsrf(req, res);
@@ -293,10 +303,61 @@ app.post("/api/staff/signout", requireCsrf, (req, res) => {
   res.json({ ok: true, csrf });
 });
 
+function chipSubject(sessionLabel) {
+  const label = String(sessionLabel || "");
+  for (const chip of SUBJECT_CHIPS) {
+    if (label === chip || label.startsWith(chip + " ")) return chip;
+  }
+  return "Other";
+}
+
+function buildMetrics() {
+  const ratingHist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  const recommend = { yes: 0, no: 0, skip: 0 };
+  const subjects = { Math: 0, Science: 0, Writing: 0, "Test prep": 0, Other: 0 };
+  let ratingSum = 0;
+  let lastSubmitAt = null;
+  for (const item of feedback) {
+    const r = Number(item.rating);
+    if (ratingHist[r] !== undefined) {
+      ratingHist[r] += 1;
+      ratingSum += r;
+    }
+    const rec = item.wouldRecommend || "skip";
+    if (recommend[rec] !== undefined) recommend[rec] += 1;
+    else recommend.skip += 1;
+    const sub = chipSubject(item.sessionLabel);
+    subjects[sub] = (subjects[sub] || 0) + 1;
+    if (!lastSubmitAt || item.createdAt > lastSubmitAt) lastSubmitAt = item.createdAt;
+  }
+  const count = feedback.length;
+  return {
+    totalSubmissions: count,
+    avgRating: count ? Math.round((ratingSum / count) * 10) / 10 : null,
+    ratingHistogram: ratingHist,
+    recommend,
+    subjectMix: subjects,
+    lastSubmitAt,
+    processStartedAt: ops.startedAt,
+    softPiiRejects: ops.softPiiRejects,
+    staffSignins: ops.staffSignins,
+    staffCookieTtlSeconds: 3600,
+  };
+}
+
 app.get("/api/feedback", requireStaff, (req, res) => {
+  // Staff list shows ratings/recommend/subject chip only — not free-text bodies (PII risk).
+  const items = feedback.slice(-25).reverse().map((item) => ({
+    id: item.id,
+    createdAt: item.createdAt,
+    rating: item.rating,
+    wouldRecommend: item.wouldRecommend,
+    subject: chipSubject(item.sessionLabel),
+  }));
   res.json({
     count: feedback.length,
-    items: feedback.slice(-25).reverse(),
+    metrics: buildMetrics(),
+    items,
   });
 });
 
@@ -341,6 +402,7 @@ app.post("/api/feedback", submitLimiter, requireCsrf, (req, res) => {
     /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(blob) ||
     /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/.test(blob)
   ) {
+    ops.softPiiRejects += 1;
     return res.status(400).json({
       error: "Remove personal contact details (email/phone) before submitting.",
     });
@@ -380,6 +442,25 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Server error." });
 });
 
+function seedSyntheticFeedback() {
+  if (feedback.length) return;
+  const samples = [
+    { sessionLabel: "Math session", rating: 5, wouldRecommend: "yes", whatWentWell: "Clear pacing", whatCouldImprove: "More practice problems" },
+    { sessionLabel: "Science session", rating: 4, wouldRecommend: "yes", whatWentWell: "Good visuals", whatCouldImprove: "Slower on formulas" },
+    { sessionLabel: "Writing session", rating: 3, wouldRecommend: "skip", whatWentWell: "Outline help", whatCouldImprove: "More examples" },
+    { sessionLabel: "Test prep session", rating: 5, wouldRecommend: "yes", whatWentWell: "Timed drills", whatCouldImprove: "Harder stretch questions" },
+    { sessionLabel: "custom free text", rating: 2, wouldRecommend: "no", whatWentWell: "Tried hard", whatCouldImprove: "Different approach" },
+  ];
+  for (const s of samples) {
+    feedback.push({
+      id: crypto.randomUUID(),
+      createdAt: new Date(Date.now() - Math.floor(Math.random() * 3600_000)).toISOString(),
+      ...s,
+    });
+  }
+}
+
 app.listen(PORT, "127.0.0.1", () => {
+  seedSyntheticFeedback();
   console.log(`nerdy-feedback-demo listening on http://127.0.0.1:${PORT}`);
 });
