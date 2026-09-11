@@ -1,0 +1,210 @@
+"use strict";
+
+const express = require("express");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const cookieParser = require("cookie-parser");
+const crypto = require("crypto");
+const path = require("path");
+
+const PORT = process.env.PORT || 8787;
+const SESSION_SECRET =
+  process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
+
+// In-memory store for the demo only — no durable PII, no minor identifiers.
+const feedback = [];
+const MAX_FEEDBACK = 200;
+const MAX_LEN = {
+  sessionLabel: 80,
+  rating: 1,
+  whatWentWell: 1000,
+  whatCouldImprove: 1000,
+};
+
+const app = express();
+
+app.set("trust proxy", 1);
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    referrerPolicy: { policy: "no-referrer" },
+  })
+);
+
+app.use(express.urlencoded({ extended: false, limit: "16kb" }));
+app.use(express.json({ limit: "16kb" }));
+app.use(cookieParser(SESSION_SECRET));
+app.use(express.static(path.join(__dirname, "public"), { index: false }));
+
+const submitLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many submissions. Try again later." },
+});
+
+function issueCsrf(req, res) {
+  const token = crypto.randomBytes(24).toString("hex");
+  res.cookie("csrf", token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    signed: true,
+    maxAge: 60 * 60 * 1000,
+  });
+  return token;
+}
+
+function requireCsrf(req, res, next) {
+  const cookieToken = req.signedCookies.csrf;
+  const bodyToken = req.body && req.body._csrf;
+  if (!cookieToken || !bodyToken || cookieToken !== bodyToken) {
+    return res.status(403).json({ error: "Invalid or missing CSRF token." });
+  }
+  next();
+}
+
+function sanitizeText(value, max) {
+  if (typeof value !== "string") return "";
+  return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").trim().slice(0, max);
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+app.get("/", (req, res) => {
+  const token = issueCsrf(req, res);
+  res.type("html").send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Nerdy Tutors — Session Feedback (Demo)</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header>
+      <p class="eyebrow">Demo · not production</p>
+      <h1>Tutoring session feedback</h1>
+      <p class="lede">For StudentBot to share how a Nerdy Tutors session went. Do not enter student names, emails, account IDs, or other personal identifiers.</p>
+    </header>
+    <form id="feedback-form" method="post" action="/api/feedback" novalidate>
+      <input type="hidden" name="_csrf" value="${escapeHtml(token)}" />
+      <label>
+        Session label <span class="hint">(generic only, e.g. “math practice — week 3”)</span>
+        <input name="sessionLabel" maxlength="80" required placeholder="math practice — week 3" autocomplete="off" />
+      </label>
+      <fieldset>
+        <legend>Overall rating</legend>
+        <label class="radio"><input type="radio" name="rating" value="5" required /> 5 — excellent</label>
+        <label class="radio"><input type="radio" name="rating" value="4" /> 4 — good</label>
+        <label class="radio"><input type="radio" name="rating" value="3" /> 3 — okay</label>
+        <label class="radio"><input type="radio" name="rating" value="2" /> 2 — needs work</label>
+        <label class="radio"><input type="radio" name="rating" value="1" /> 1 — poor</label>
+      </fieldset>
+      <label>
+        What went well
+        <textarea name="whatWentWell" maxlength="1000" rows="4" required placeholder="Topics covered, pacing, clarity…"></textarea>
+      </label>
+      <label>
+        What could improve
+        <textarea name="whatCouldImprove" maxlength="1000" rows="4" required placeholder="Gaps, confusion, UX friction…"></textarea>
+      </label>
+      <p class="privacy">No names, emails, phone numbers, or account IDs. This demo stores feedback in memory only and clears on restart.</p>
+      <button type="submit">Submit feedback</button>
+      <p id="status" role="status" aria-live="polite"></p>
+    </form>
+    <section class="recent">
+      <h2>Recent submissions <span class="hint">(demo board)</span></h2>
+      <div id="list">Loading…</div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>`);
+});
+
+app.get("/api/feedback", (req, res) => {
+  res.json({
+    count: feedback.length,
+    items: feedback.slice(-25).reverse(),
+  });
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({ ok: true, service: "nerdy-feedback-demo" });
+});
+
+app.post("/api/feedback", submitLimiter, requireCsrf, (req, res) => {
+  const sessionLabel = sanitizeText(req.body.sessionLabel, MAX_LEN.sessionLabel);
+  const ratingRaw = sanitizeText(String(req.body.rating || ""), 1);
+  const whatWentWell = sanitizeText(req.body.whatWentWell, MAX_LEN.whatWentWell);
+  const whatCouldImprove = sanitizeText(
+    req.body.whatCouldImprove,
+    MAX_LEN.whatCouldImprove
+  );
+
+  const rating = Number(ratingRaw);
+  if (!sessionLabel || !whatWentWell || !whatCouldImprove) {
+    return res.status(400).json({ error: "All fields are required." });
+  }
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: "Rating must be 1–5." });
+  }
+
+  // Soft PII guard: reject obvious email / phone patterns in free text.
+  const blob = `${sessionLabel}\n${whatWentWell}\n${whatCouldImprove}`;
+  if (/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(blob) || /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/.test(blob)) {
+    return res.status(400).json({
+      error: "Remove personal contact details (email/phone) before submitting.",
+    });
+  }
+
+  const entry = {
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    sessionLabel,
+    rating,
+    whatWentWell,
+    whatCouldImprove,
+  };
+
+  feedback.push(entry);
+  if (feedback.length > MAX_FEEDBACK) feedback.shift();
+
+  issueCsrf(req, res);
+  res.status(201).json({ ok: true, id: entry.id });
+});
+
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: "Server error." });
+});
+
+app.listen(PORT, "127.0.0.1", () => {
+  console.log(`nerdy-feedback-demo listening on http://127.0.0.1:${PORT}`);
+});

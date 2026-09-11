@@ -1,0 +1,87 @@
+:root {
+  color-scheme: light;
+  --bg: #f6f3ee;
+  --ink: #1c1a17;
+  --muted: #5c564c;
+  --card: #fffdf8;
+  --accent: #0b6e4f;
+  --line: #e4ddd2;
+  --warn: #8a4b08;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: radial-gradient(1200px 600px at 10% -10%, #dff3ea, transparent), var(--bg);
+  color: var(--ink);
+}
+.wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 4rem;
+}
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+h1 { margin: 0 0 0.5rem; font-size: 1.85rem; }
+h2 { margin: 0 0 0.75rem; font-size: 1.15rem; }
+.lede, .hint, .privacy { color: var(--muted); }
+.lede { margin: 0 0 1.5rem; line-height: 1.45; }
+form, .recent {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.25rem;
+  box-shadow: 0 8px 24px rgba(28, 26, 23, 0.04);
+}
+label { display: block; margin-bottom: 1rem; font-weight: 600; }
+.hint { font-weight: 400; font-size: 0.9rem; }
+input[type="text"], input:not([type]), textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.4rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font: inherit;
+  background: #fff;
+}
+fieldset {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+}
+.radio { font-weight: 500; margin: 0.35rem 0; }
+.privacy {
+  font-size: 0.9rem;
+  border-left: 3px solid var(--warn);
+  padding-left: 0.75rem;
+  margin: 0 0 1rem;
+}
+button {
+  background: var(--accent);
+  color: white;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.75rem 1.25rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+button:hover { filter: brightness(1.05); }
+#status { min-height: 1.25rem; margin: 0.75rem 0 0; }
+.recent { margin-top: 1.5rem; }
+.card {
+  border-top: 1px solid var(--line);
+  padding: 0.9rem 0;
+}
+.card:first-child { border-top: 0; }
+.meta { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+.empty { color: var(--muted); }

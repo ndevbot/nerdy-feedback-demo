@@ -1,0 +1,18 @@
+{
+  "name": "nerdy-feedback-demo",
+  "version": "1.0.0",
+  "description": "Demo site for StudentBot tutoring feedback (Nerdy Tutors)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "csrf-csrf": "^3.0.6",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0"
+  }
+}
