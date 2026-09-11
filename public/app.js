@@ -16,6 +16,8 @@
   const panelStaff = document.getElementById("panel-staff");
   const tabs = document.querySelectorAll(".tab");
   var lastEntry = null;
+  var staffRatingFilter = "all";
+  var lastStaffItems = [];
 
   function escapeHtml(s) {
     return String(s)
@@ -70,9 +72,25 @@
   }
 
   function recommendLabel(v) {
-    if (v === "yes") return "Would recommend: yes";
-    if (v === "no") return "Would recommend: no";
-    return "Would recommend: not stated";
+    if (v === "yes") return "Recommend: yes";
+    if (v === "no") return "Recommend: no";
+    return "Recommend: skip / not stated";
+  }
+
+  function friendlyTime(iso) {
+    if (!iso) return "—";
+    var t = Date.parse(iso);
+    if (!t) return iso;
+    var sec = Math.round((Date.now() - t) / 1000);
+    if (sec < 60) return "just now";
+    if (sec < 3600) return Math.floor(sec / 60) + "m ago";
+    if (sec < 86400) return Math.floor(sec / 3600) + "h ago";
+    if (sec < 86400 * 7) return Math.floor(sec / 86400) + "d ago";
+    try {
+      return new Date(t).toLocaleString();
+    } catch (e) {
+      return iso;
+    }
   }
 
   function showSaved(entry) {
@@ -114,20 +132,63 @@
     var hist = m.ratingHistogram || {};
     var rec = m.recommend || {};
     var sub = m.subjectMix || {};
+    var total = m.totalSubmissions || 0;
+    function bar(n) {
+      var count = hist[n] || 0;
+      var pct = total ? Math.round((count / total) * 100) : 0;
+      return (
+        '<div class="bar-row"><span class="bar-label">' + n + '★</span>' +
+        '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
+        '<span class="bar-count">' + count + '</span></div>'
+      );
+    }
     el.innerHTML =
       '<div class="metric-grid">' +
-      '<div class="metric"><span class="metric-label">Submissions</span><span class="metric-value">' + escapeHtml(String(m.totalSubmissions || 0)) + '</span></div>' +
+      '<div class="metric"><span class="metric-label">Submissions</span><span class="metric-value">' + escapeHtml(String(total)) + '</span></div>' +
       '<div class="metric"><span class="metric-label">Avg rating</span><span class="metric-value">' + escapeHtml(m.avgRating == null ? "—" : String(m.avgRating)) + '</span></div>' +
-      '<div class="metric"><span class="metric-label">Last submit</span><span class="metric-value metric-small">' + escapeHtml(m.lastSubmitAt || "—") + '</span></div>' +
-      '<div class="metric"><span class="metric-label">Staff cookie TTL</span><span class="metric-value">' + escapeHtml(String(m.staffCookieTtlSeconds || 3600)) + 's</span></div>' +
-      '<div class="metric"><span class="metric-label">Soft PII rejects</span><span class="metric-value">' + escapeHtml(String(m.softPiiRejects || 0)) + '</span></div>' +
-      '<div class="metric"><span class="metric-label">Staff sign-ins</span><span class="metric-value">' + escapeHtml(String(m.staffSignins || 0)) + '</span></div>' +
+      '<div class="metric"><span class="metric-label">Last submit</span><span class="metric-value metric-small">' + escapeHtml(friendlyTime(m.lastSubmitAt)) + '</span></div>' +
       '</div>' +
-      '<div class="metric-row"><strong>Ratings 1–5:</strong> ' +
-      [1,2,3,4,5].map(function (n) { return n + "★ " + (hist[n] || 0); }).join(" · ") +
-      '</div>' +
-      '<div class="metric-row"><strong>Recommend:</strong> yes ' + (rec.yes || 0) + ' · no ' + (rec.no || 0) + ' · skip ' + (rec.skip || 0) + '</div>' +
-      '<div class="metric-row"><strong>Subjects (chips only):</strong> Math ' + (sub.Math || 0) + ' · Science ' + (sub.Science || 0) + ' · Writing ' + (sub.Writing || 0) + ' · Test prep ' + (sub["Test prep"] || 0) + ' · Other ' + (sub.Other || 0) + '</div>';
+      '<div class="rating-bars">' + [5,4,3,2,1].map(bar).join("") + '</div>' +
+      '<div class="metric-row"><strong>Recommend:</strong> yes ' + (rec.yes || 0) + ' · no ' + (rec.no || 0) + ' · skip / not stated ' + (rec.skip || 0) + '</div>' +
+      '<div class="metric-row"><strong>Subjects:</strong> Math ' + (sub.Math || 0) + ' · Science ' + (sub.Science || 0) + ' · Writing ' + (sub.Writing || 0) + ' · Test prep ' + (sub["Test prep"] || 0) + ' · Other ' + (sub.Other || 0) + '</div>' +
+      '<details class="ops-metrics"><summary>Demo diagnostics</summary>' +
+      '<div class="metric-row">Soft PII rejects: ' + (m.softPiiRejects || 0) + '</div>' +
+      '<div class="metric-row">Staff sign-ins: ' + (m.staffSignins || 0) + '</div>' +
+      '<div class="metric-row">Staff cookie TTL: ' + (m.staffCookieTtlSeconds || 3600) + 's</div>' +
+      '</details>';
+  }
+
+
+  function renderStaffList() {
+    if (!list) return;
+    if (!lastStaffItems.length) {
+      list.innerHTML = '<p class="empty">No submissions yet — metrics will fill as students submit synthetic feedback.</p>';
+      return;
+    }
+    var items = lastStaffItems.filter(function (item) {
+      return staffRatingFilter === "all" || String(item.rating) === String(staffRatingFilter);
+    });
+    if (!items.length) {
+      list.innerHTML = '<p class="empty">No rows for this rating filter.</p>';
+      return;
+    }
+    list.innerHTML = items
+      .map(function (item) {
+        return (
+          '<article class="card">' +
+          '<div class="meta">Rating ' +
+          escapeHtml(item.rating) +
+          "/5 · " +
+          escapeHtml(recommendLabel(item.wouldRecommend)) +
+          " · " +
+          escapeHtml(item.subject || "Other") +
+          " · " +
+          escapeHtml(friendlyTime(item.createdAt)) +
+          "</div>" +
+          "</article>"
+        );
+      })
+      .join("");
   }
 
   async function refreshBoard() {
@@ -144,27 +205,10 @@
       }
       const data = await res.json();
       renderMetrics(data.metrics);
-      if (!data.items || !data.items.length) {
-        list.innerHTML = '<p class="empty">No submissions yet — metrics will fill as students submit synthetic feedback.</p>';
-        return;
-      }
-      list.innerHTML = data.items
-        .map(function (item) {
-          return (
-            '<article class="card">' +
-            '<div class="meta">Rating ' +
-            escapeHtml(item.rating) +
-            "/5 · " +
-            escapeHtml(recommendLabel(item.wouldRecommend)) +
-            " · " +
-            escapeHtml(item.subject || "Other") +
-            " · " +
-            escapeHtml(item.createdAt) +
-            "</div>" +
-            "</article>"
-          );
-        })
-        .join("");
+      lastStaffItems = data.items || [];
+      var filters = document.getElementById("staff-filters");
+      if (filters) filters.hidden = !lastStaffItems.length;
+      renderStaffList();
     } catch (e) {
       list.innerHTML = '<p class="empty">Couldn’t load the staff board — try again in a moment.</p>';
     }
@@ -201,6 +245,20 @@
     ta.addEventListener("input", function () { clearOneFieldError(id); });
   });
 
+
+
+  var staffFilters = document.getElementById("staff-filters");
+  if (staffFilters) {
+    staffFilters.addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-rating]");
+      if (!btn) return;
+      staffRatingFilter = btn.getAttribute("data-rating") || "all";
+      staffFilters.querySelectorAll(".filter-chip").forEach(function (c) {
+        c.classList.toggle("active", c === btn);
+      });
+      renderStaffList();
+    });
+  }
 
   // Subject chips
   document.querySelectorAll("#subject-chips .chip").forEach(function (chip) {

@@ -153,7 +153,7 @@ app.get("/", (req, res) => {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex,nofollow" />
   <title>Nerdy Tutors — Session Feedback (Demo)</title>
-  <link rel="stylesheet" href="/styles.css?v=11" />
+  <link rel="stylesheet" href="/styles.css?v=13" />
 </head>
 <body>
   <div class="shell">
@@ -246,8 +246,8 @@ app.get("/", (req, res) => {
       <section id="panel-staff" class="panel" role="tabpanel" aria-labelledby="tab-staff" hidden>
         <div class="hero">
           <p class="eyebrow">Staff / demo only</p>
-          <h1>Recent submissions</h1>
-          <p class="lede">Not for students. Sign in with any <code>@${escapeHtml(STAFF_DOMAIN)}</code> username to view the board. No password — demo gate only.</p>
+          <h1>Feedback overview</h1>
+          <p class="lede">Not for students. Sign in with any <code>@${escapeHtml(STAFF_DOMAIN)}</code> username to view metrics and a privacy-safe activity list.</p>
         </div>
 
         <div id="staff-gate" ${staff ? "hidden" : ""}>
@@ -266,13 +266,22 @@ app.get("/", (req, res) => {
         <div id="staff-board" ${staff ? "" : "hidden"}>
           <p class="hint">Signed in as <strong id="staff-who">${staffUser}</strong> · <button type="button" id="staff-signout" class="linkish">Sign out</button></p>
           <div id="metrics" class="metrics" aria-live="polite">${staff ? "Loading metrics…" : ""}</div>
-          <h2 class="staff-list-title">Recent submissions <span class="hint">(aggregates / chip subject only — no free-text)</span></h2>
+          <div class="staff-filters" id="staff-filters" hidden>
+            <span class="hint">Filter:</span>
+            <button type="button" class="chip filter-chip active" data-rating="all">All</button>
+            <button type="button" class="chip filter-chip" data-rating="5">5★</button>
+            <button type="button" class="chip filter-chip" data-rating="4">4★</button>
+            <button type="button" class="chip filter-chip" data-rating="3">3★</button>
+            <button type="button" class="chip filter-chip" data-rating="2">2★</button>
+            <button type="button" class="chip filter-chip" data-rating="1">1★</button>
+          </div>
+          <h2 class="staff-list-title">Recent activity <span class="hint">(chip subject · rating · recommend — no free-text)</span></h2>
           <div id="list">${staff ? "Loading…" : ""}</div>
         </div>
       </section>
     </main>
   </div>
-  <script src="/app.js?v=11"></script>
+  <script src="/app.js?v=13"></script>
 </body>
 </html>`);
 });
@@ -304,9 +313,16 @@ app.post("/api/staff/signout", requireCsrf, (req, res) => {
 });
 
 function chipSubject(sessionLabel) {
-  const label = String(sessionLabel || "");
+  const label = String(sessionLabel || "").toLowerCase();
+  if (!label.trim()) return "Other";
+  // Match fixed chips + common student free-text synonyms (still no free-text displayed).
+  if (/(math|algebra|geometry|calculus|trig)/.test(label)) return "Math";
+  if (/(science|chem|biology|\bbio\b|physics)/.test(label)) return "Science";
+  if (/(writing|essay|english|grammar)/.test(label)) return "Writing";
+  if (/(test prep|\bsat\b|\bact\b|exam prep|gre|gmat)/.test(label)) return "Test prep";
   for (const chip of SUBJECT_CHIPS) {
-    if (label === chip || label.startsWith(chip + " ")) return chip;
+    const c = chip.toLowerCase();
+    if (label === c || label.startsWith(c + " ") || label.includes(c)) return chip;
   }
   return "Other";
 }
