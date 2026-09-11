@@ -16,6 +16,8 @@
   const panelStaff = document.getElementById("panel-staff");
   const tabs = document.querySelectorAll(".tab");
   var lastEntry = null;
+  var staffRatingFilter = "all";
+  var lastStaffItems = [];
 
   function escapeHtml(s) {
     return String(s)
@@ -149,11 +151,44 @@
       '<div class="rating-bars">' + [5,4,3,2,1].map(bar).join("") + '</div>' +
       '<div class="metric-row"><strong>Recommend:</strong> yes ' + (rec.yes || 0) + ' · no ' + (rec.no || 0) + ' · skip / not stated ' + (rec.skip || 0) + '</div>' +
       '<div class="metric-row"><strong>Subjects:</strong> Math ' + (sub.Math || 0) + ' · Science ' + (sub.Science || 0) + ' · Writing ' + (sub.Writing || 0) + ' · Test prep ' + (sub["Test prep"] || 0) + ' · Other ' + (sub.Other || 0) + '</div>' +
-      '<details class="ops-metrics"><summary>Ops metrics</summary>' +
+      '<details class="ops-metrics"><summary>Demo diagnostics</summary>' +
       '<div class="metric-row">Soft PII rejects: ' + (m.softPiiRejects || 0) + '</div>' +
       '<div class="metric-row">Staff sign-ins: ' + (m.staffSignins || 0) + '</div>' +
       '<div class="metric-row">Staff cookie TTL: ' + (m.staffCookieTtlSeconds || 3600) + 's</div>' +
       '</details>';
+  }
+
+
+  function renderStaffList() {
+    if (!list) return;
+    if (!lastStaffItems.length) {
+      list.innerHTML = '<p class="empty">No submissions yet — metrics will fill as students submit synthetic feedback.</p>';
+      return;
+    }
+    var items = lastStaffItems.filter(function (item) {
+      return staffRatingFilter === "all" || String(item.rating) === String(staffRatingFilter);
+    });
+    if (!items.length) {
+      list.innerHTML = '<p class="empty">No rows for this rating filter.</p>';
+      return;
+    }
+    list.innerHTML = items
+      .map(function (item) {
+        return (
+          '<article class="card">' +
+          '<div class="meta">Rating ' +
+          escapeHtml(item.rating) +
+          "/5 · " +
+          escapeHtml(recommendLabel(item.wouldRecommend)) +
+          " · " +
+          escapeHtml(item.subject || "Other") +
+          " · " +
+          escapeHtml(friendlyTime(item.createdAt)) +
+          "</div>" +
+          "</article>"
+        );
+      })
+      .join("");
   }
 
   async function refreshBoard() {
@@ -170,27 +205,10 @@
       }
       const data = await res.json();
       renderMetrics(data.metrics);
-      if (!data.items || !data.items.length) {
-        list.innerHTML = '<p class="empty">No submissions yet — metrics will fill as students submit synthetic feedback.</p>';
-        return;
-      }
-      list.innerHTML = data.items
-        .map(function (item) {
-          return (
-            '<article class="card">' +
-            '<div class="meta">Rating ' +
-            escapeHtml(item.rating) +
-            "/5 · " +
-            escapeHtml(recommendLabel(item.wouldRecommend)) +
-            " · " +
-            escapeHtml(item.subject || "Other") +
-            " · " +
-            escapeHtml(friendlyTime(item.createdAt)) +
-            "</div>" +
-            "</article>"
-          );
-        })
-        .join("");
+      lastStaffItems = data.items || [];
+      var filters = document.getElementById("staff-filters");
+      if (filters) filters.hidden = !lastStaffItems.length;
+      renderStaffList();
     } catch (e) {
       list.innerHTML = '<p class="empty">Couldn’t load the staff board — try again in a moment.</p>';
     }
@@ -227,6 +245,20 @@
     ta.addEventListener("input", function () { clearOneFieldError(id); });
   });
 
+
+
+  var staffFilters = document.getElementById("staff-filters");
+  if (staffFilters) {
+    staffFilters.addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-rating]");
+      if (!btn) return;
+      staffRatingFilter = btn.getAttribute("data-rating") || "all";
+      staffFilters.querySelectorAll(".filter-chip").forEach(function (c) {
+        c.classList.toggle("active", c === btn);
+      });
+      renderStaffList();
+    });
+  }
 
   // Subject chips
   document.querySelectorAll("#subject-chips .chip").forEach(function (chip) {
